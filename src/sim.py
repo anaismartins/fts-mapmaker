@@ -72,6 +72,7 @@ if __name__ == "__main__":
 
     # introduce scanning strategy
     pix_gal = np.load("../input/firas_scanning_strategy.npy").astype(int)
+
     ifg_scanning = np.zeros((len(pix_gal), IFG_SIZE))
     for i, pix in enumerate(pix_gal):
         ifg_scanning[i] = ifg[pix]
