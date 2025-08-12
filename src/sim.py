@@ -63,25 +63,36 @@ if __name__ == "__main__":
 
     ifg = np.fft.irfft(spec, axis=1)
 
-    fig, ax = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
-
     # add phase to ifg
     ifg = np.roll(ifg, 360, axis=1)
     # turn ifg into real signal
     ifg = ifg.real
 
     # introduce scanning strategy
-    pix_gal = np.load("../input/firas_scanning_strategy.npy").astype(int)
+    # pix_gal = np.load("../input/firas_scanning_strategy.npy").astype(int)
+    pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
 
-    ifg_scanning = np.zeros((len(pix_gal), IFG_SIZE))
-    for i, pix in enumerate(pix_gal):
-        ifg_scanning[i] = ifg[pix]
+    ifg_scanning = np.zeros((len(pix_ecl), IFG_SIZE))
+    for j in range(3):
+        for i, pix in enumerate(pix_ecl[:, j]):
+            ifg_scanning[i] += ifg[pix]/3
 
     # add noise to ifg
     ifg_scanning = ifg_scanning + white_noise(ifg_scanning.shape[0])
 
+    # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 1")
+    # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 2")
+    # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 3")
+    # plt.xlabel("Spacing")
+    # plt.ylabel("Signal (mJy)")
+    # plt.title("Interferogram")
+    # plt.legend()
+    # plt.show()
+    # plt.savefig("../output/interferogram.png")
+    # plt.close()
+
     # save ifg products in a npz file
-    np.savez("../output/ifgs.npz", ifg=ifg_scanning, pix=pix_gal)
+    np.savez("../output/ifgs.npz", ifg=ifg_scanning)
 
     time_end = time.time()
     print(f"Time elapsed for IFGs: {(time_end - time_start)/60} minutes")
