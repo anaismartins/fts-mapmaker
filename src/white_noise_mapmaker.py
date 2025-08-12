@@ -5,13 +5,11 @@ or more explicitely
     (P^T M^T N^{-1} M P) m = P^T M^T N^{-1} d.
 """
 
-import os
-import sys
-
-import globals as g
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
+
+import globals as g
 import utils
 
 if __name__ == "__main__":
@@ -28,8 +26,10 @@ if __name__ == "__main__":
     denominator = np.zeros(npix, dtype=float)
     for pixi in range(3):
         for xi in range(d.shape[1]):
-            numerator[:, xi] += np.bincount(P[:, pixi], weights=d[:, xi]/sigma**2, minlength=npix) / 3
-        denominator += np.bincount(P[:, pixi], weights=1/sigma**2, minlength=npix) / 3
+            numerator[:, xi] += (
+                np.bincount(P[:, pixi], weights=d[:, xi] / sigma**2, minlength=npix) / 3
+            )
+        denominator += np.bincount(P[:, pixi], weights=1 / sigma**2, minlength=npix) / 3
     m = numerator / denominator[:, np.newaxis]
     m = np.fft.rfft(m, axis=1)
 
@@ -37,7 +37,11 @@ if __name__ == "__main__":
     # save m as maps
     for nui in range(len(frequencies)):
         if g.FITS:
-            hp.write_map(f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.fits", np.abs(m[:, nui]), overwrite=True)
+            hp.write_map(
+                f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.fits",
+                np.abs(m[:, nui]),
+                overwrite=True,
+            )
         if g.PNG:
             hp.mollview(
                 np.abs(m[:, nui]),
@@ -49,6 +53,8 @@ if __name__ == "__main__":
                 coord=["E", "G"],
                 # norm='hist',
             )
-            plt.savefig(f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.png")
+            plt.savefig(
+                f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.png"
+            )
             plt.close()
             plt.clf()

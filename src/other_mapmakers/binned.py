@@ -14,11 +14,27 @@ import utils
 d = np.load("../../output/ifgs.npz")["ifg"]
 pix = np.load("../../input/firas_scanning_strategy.npy")
 
+# plot hit map of the scanning strategy
+hit_map = np.bincount(pix[:, 1], minlength=hp.nside2npix(g.NSIDE)).astype(float)
+mask = hit_map == 0
+hit_map[mask] = hp.UNSEEN
+hp.mollview(
+    hit_map,
+    title="Scanning Strategy Hit Map",
+    unit="Hits",
+    min=0,
+    max=hit_map.max(),
+    xsize=2000,
+)
+plt.savefig("../../output/scanning_strategy_hit_map.png")
+plt.close()
+
 npix = hp.nside2npix(g.NSIDE)
 frequencies = utils.generate_frequencies("ll", "ss", 257)
 
-data_density = np.zeros(npix, dtype=int)
 m = np.zeros((npix, 257), dtype=complex)
+data_density = np.zeros(npix, dtype=float)
+
 for i in range(pix.shape[0]):
     for j in range(pix.shape[1]):
         m[pix[i, j]] += np.abs(np.fft.rfft(d[i])) / 3

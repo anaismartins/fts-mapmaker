@@ -3,10 +3,12 @@ Downgrades the Planck map to a lower resolution.
 """
 
 import astropy.units as u
-import globals as g
 import healpy as hp
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
+
+import globals as g
 
 dust_map_path = "../input/COM_CompMap_ThermalDust-commander_n2048_R2.00.fits"
 
@@ -32,7 +34,7 @@ dust_map_downgraded = hp.ud_grade(
 # plt.savefig("tests/dust_map_downgraded.png")
 # plt.close()
 
-nu0_dust = 545 # Planck
+nu0_dust = 545  # Planck
 
 # let's change the units from uK_RJ to MJy/sr
 dust_map_downgraded_mjy = (dust_map_downgraded * u.uK).to(
@@ -40,7 +42,8 @@ dust_map_downgraded_mjy = (dust_map_downgraded * u.uK).to(
     equivalencies=u.brightness_temperature(nu0_dust * u.GHz),
 )
 
+rot = hp.Rotator(coord=["G", "E"])
+m_ecl = rot.rotate_map_pixel(dust_map_downgraded_mjy)
+
 # save downgraded map in mjy/sr in order to be able to open it again in python
-fits.writeto(
-    "../output/dust_map_downgraded.fits", dust_map_downgraded_mjy.value, overwrite=True
-)
+fits.writeto("../output/dust_map_downgraded.fits", m_ecl.value, overwrite=True)
