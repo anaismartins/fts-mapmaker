@@ -22,12 +22,14 @@ if __name__ == "__main__":
     sigma = np.load("../output/white_noise.npz")["noise"]
 
     npix = hp.nside2npix(g.NSIDE)
-    P = np.load("../output/ifgs.npz")["pix"]
+    P = np.load("../input/firas_scanning_strategy.npy")
 
     numerator = np.zeros((npix, d.shape[1]), dtype=float)
-    for xi in range(d.shape[1]):
-        numerator[:, xi] = np.bincount(P, weights=d[:, xi]/sigma**2, minlength=npix)
-    denominator = np.bincount(P, weights=1/sigma**2, minlength=npix)
+    denominator = np.zeros(npix, dtype=float)
+    for pixi in range(3):
+        for xi in range(d.shape[1]):
+            numerator[:, xi] += np.bincount(P[:, pixi], weights=d[:, xi]/sigma**2, minlength=npix) / 3
+        denominator += np.bincount(P[:, pixi], weights=1/sigma**2, minlength=npix) / 3
     m = numerator / denominator[:, np.newaxis]
     m = np.fft.rfft(m, axis=1)
 
@@ -44,6 +46,7 @@ if __name__ == "__main__":
                 min=0,
                 max=200,
                 xsize=2000,
+                coord=["E", "G"],
                 # norm='hist',
             )
             plt.savefig(f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.png")
