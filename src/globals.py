@@ -5,3 +5,4 @@ PNG = True
 FITS = False
 
 NSIDE = 32
+NPIX = 12 * NSIDE**2

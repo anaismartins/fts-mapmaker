@@ -3,12 +3,13 @@ import sys
 import time
 
 import astropy.units as u
-import h5py
+import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
+
+from globals import IFG_SIZE, SPEC_SIZE
 from utils import dust
-from globals import IFG_SIZE
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -71,14 +72,38 @@ if __name__ == "__main__":
     # introduce scanning strategy
     # pix_gal = np.load("../input/firas_scanning_strategy.npy").astype(int)
     pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
+    print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
     ifg_scanning = np.zeros((len(pix_ecl), IFG_SIZE))
+    spec_scanning = np.zeros((len(pix_ecl), SPEC_SIZE))
+    print("Calculating IFGs for scanning strategy")
     for j in range(3):
         for i, pix in enumerate(pix_ecl[:, j]):
             ifg_scanning[i] += ifg[pix]/3
+            spec_scanning[i] += spec[pix]/3
 
     # add noise to ifg
     ifg_scanning = ifg_scanning + white_noise(ifg_scanning.shape[0])
+
+    # bin spec_scanning into spec maps
+    spec_map = np.zeros((g.NPIX, g.SPEC_SIZE))
+    dd = np.zeros(g.NPIX)
+    for i in range(pix_ecl.shape[0]):
+        for j in range(pix_ecl.shape[1]):
+            spec_map[pix_ecl[i, j]] += spec_scanning[i] / 3
+            dd[pix_ecl[i, j]] += 1 / 3
+
+    mask = dd == 0
+    spec_map[~mask] = spec_map[~mask] / dd[~mask][:, np.newaxis]
+    spec_map[mask] = np.nan
+
+    for i, freq in enumerate(frequencies):
+        if g.PNG:
+            hp.mollview(spec_map[:, i], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=200, xsize=2000, coord=['E', 'G'])
+            plt.savefig(f"../output/sim_maps/{int(freq):04d}.png")
+            plt.close()
+        if g.FITS:
+            hp.write_map(f"../output/sim_maps/{int(freq):04d}.fits", spec_map[:, i], overwrite=True)
 
     # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 1")
     # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 2")
@@ -90,6 +115,8 @@ if __name__ == "__main__":
     # plt.show()
     # plt.savefig("../output/interferogram.png")
     # plt.close()
+
+    print("Saving IFGs to file")
 
     # save ifg products in a npz file
     np.savez("../output/ifgs.npz", ifg=ifg_scanning)

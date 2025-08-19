@@ -5,8 +5,9 @@ import sys
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-from src.globals import FITS, PNG
+
 from sim import sim_dust
+from src.globals import FITS, PNG
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -28,8 +29,8 @@ def plot_ifgs(ifg):
 
 def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
     # clean previous maps
-    for file in os.listdir("./test_output/dust_maps"):
-        os.remove(f"./test_output/dust_maps/{file}")
+    for file in os.listdir("../output/dust_maps"):
+        os.remove(f"../output/dust_maps/{file}")
     # plot map for each frequency
     dust_map = dust_map_downgraded_mjy[:, np.newaxis] * signal[np.newaxis, :]
     for i, frequency in enumerate(frequencies):
@@ -38,12 +39,12 @@ def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
         if PNG:
             hp.mollview(dust_map[:, i], title=f"{int(frequency):04d} GHz", unit="MJy/sr", min=0, max=200)
             try:
-                plt.savefig(f"./test_output/dust_maps/{int(frequency):04d}.fits")
+                plt.savefig(f"../output/dust_maps/{int(frequency):04d}.fits")
             except Exception as e:
                 logging.error(f"Failed to save plot for frequency {int(frequency):04d}: {e}")
             plt.clf()
         if FITS:
-            output_file = f"./test_output/dust_maps/{int(frequency):04d}.fits"
+            output_file = f"../output/dust_maps/{int(frequency):04d}.fits"
             if os.path.exists(output_file):
                 logging.warning(f"Overwriting existing file: {output_file}")
             hp.write_map(output_file, dust_map[:, i], overwrite=True)
