@@ -27,6 +27,7 @@ def plot_ifgs(ifg):
         plt.savefig(f"./test_output/ifgs/{i}.png")
         plt.close()
 
+
 def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
     # clean previous maps
     for file in os.listdir("../output/dust_maps"):
@@ -37,12 +38,21 @@ def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
         logging.info(f"Plotting dust map for frequency {i}")
         # dust_map = dust_map_downgraded_mjy * signal[i]
         if PNG:
-            hp.mollview(dust_map[:, i], title=f"{int(frequency):04d} GHz", unit="MJy/sr", min=0, max=200)
+            hp.mollview(
+                dust_map[:, i],
+                title=f"{int(frequency):04d} GHz",
+                unit="MJy/sr",
+                min=0,
+                max=200,
+                coord=["E", "G"],
+            )
             try:
-                plt.savefig(f"../output/dust_maps/{int(frequency):04d}.fits")
+                plt.savefig(f"../output/dust_maps/{int(frequency):04d}.png")
+                plt.close()
             except Exception as e:
-                logging.error(f"Failed to save plot for frequency {int(frequency):04d}: {e}")
-            plt.clf()
+                logging.error(
+                    f"Failed to save plot for frequency {int(frequency):04d}: {e}"
+                )
         if FITS:
             output_file = f"../output/dust_maps/{int(frequency):04d}.fits"
             if os.path.exists(output_file):
@@ -56,22 +66,32 @@ def plot_m_invert(frequencies):
     for file in os.listdir("./test_output/m_invert"):
         os.remove(f"./test_output/m_invert/{file}")
 
-    m = np.load("./test_output/m_invert.npz")['m']
+    m = np.load("./test_output/m_invert.npz")["m"]
     # remove monopole
 
     if PNG:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
-            hp.mollview(m[:, i].real, title=f"{int(frequencies.value[i]):04d} GHz", min=0, max=200, xsize=2000)
+            hp.mollview(
+                m[:, i].real,
+                title=f"{int(frequencies.value[i]):04d} GHz",
+                min=0,
+                max=200,
+                xsize=2000,
+            )
             plt.savefig(f"./test_output/m_invert/{int(frequencies.value[i]):04d}.png")
             plt.close()
-            plt.clf()
     if FITS:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
-            hp.write_map(f"./test_output/m_invert/{int(frequencies.value[i]):04d}.fits", m[:, i].real, overwrite=True)
+            hp.write_map(
+                f"./test_output/m_invert/{int(frequencies.value[i]):04d}.fits",
+                m[:, i].real,
+                overwrite=True,
+            )
             plt.close()
             plt.clf()
+
 
 def plot_m_cg_per_tod(frequencies):
     # clean previous maps
@@ -79,21 +99,33 @@ def plot_m_cg_per_tod(frequencies):
     for file in os.listdir("./test_output/m_cg_per_tod"):
         os.remove(f"./test_output/m_cg_per_tod/{file}")
 
-    m = np.load("./test_output/cg_per_tod.npz")['m']
+    m = np.load("./test_output/cg_per_tod.npz")["m"]
 
     if PNG:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
-            hp.mollview(m[:, i].real, title=f"{int(frequencies.value[i]):04d} GHz", min=0, max=200, xsize=2000)
-            plt.savefig(f"./test_output/m_cg_per_tod/{int(frequencies.value[i]):04d}.png")
+            hp.mollview(
+                m[:, i].real,
+                title=f"{int(frequencies.value[i]):04d} GHz",
+                min=0,
+                max=200,
+                xsize=2000,
+            )
+            plt.savefig(
+                f"./test_output/m_cg_per_tod/{int(frequencies.value[i]):04d}.png"
+            )
             plt.close()
-            plt.clf()
     if FITS:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
-            hp.write_map(f"./test_output/m_cg_per_tod/{int(frequencies.value[i]):04d}.fits", m[:, i].real, overwrite=True)
+            hp.write_map(
+                f"./test_output/m_cg_per_tod/{int(frequencies.value[i]):04d}.fits",
+                m[:, i].real,
+                overwrite=True,
+            )
             plt.close()
             plt.clf()
+
 
 def plot_simulated_hit_map():
     pix = np.load("test_output/ifgs.npz")["pix"]
@@ -101,6 +133,8 @@ def plot_simulated_hit_map():
     hp.mollview(hit_map, title="Hit map", unit="Hits", min=0, max=1000)
     hp.graticule()
     plt.savefig("test_output/hit_map.png")
+    plt.close()
+
 
 if __name__ == "__main__":
     # open ifgs

@@ -24,7 +24,7 @@ def sim_dust():
     # get map data from the fits file
     dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
 
-    nu0_dust = 545 * u.GHz # Planck 2015
+    nu0_dust = 545 * u.GHz  # Planck 2015
     A_d = 163 * u.uK
     T_d = 21 * u.K
     beta_d = 1.53
@@ -34,7 +34,7 @@ def sim_dust():
     signal = dust(frequencies * u.GHz, A_d, nu0_dust, beta_d, T_d).value
     # check for invalid value encountered in divide
     signal = np.nan_to_num(signal)
-    
+
     plt.plot(frequencies, signal)
     # plt.show()
     plt.savefig("../output/signal.png")
@@ -42,14 +42,34 @@ def sim_dust():
 
     return dust_map_downgraded_mjy, frequencies, signal
 
-def white_noise(ntod, sigma_min=0.001, sigma_max=0.1):
-    sigmarand = np.random.uniform(sigma_min, sigma_max, ntod)
-    noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, IFG_SIZE))
+
+def white_noise(npix, ntod, sigma_min=0.001, sigma_max=0.1):
+    """
+    Generate white noise for the interferograms sampling the noise level from a uniform distribution.
+
+    Parameters
+    ----------
+    npix : int
+        How many pixels we assume each interferogram hits. For FIRAS, each interferogram will hit a maximum of 3 pixels, meaning this is the minimum number we want to use to divide the scanning strategy into multiple pixels. The higher this number, the closer to simulating a continuous scanning strategy.
+    ntod : int
+        Number of interferograms.
+    sigma_min : float
+        Standard deviation minimum value for the uniform distribution.
+    sigma_max : float
+        Standard deviation maximum value for the uniform distribution.
+    Returns
+    -------
+    noise : array
+        Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
+    """
+    sigmarand = np.random.uniform(sigma_min, sigma_max, (npix, ntod))
+    noise = np.random.normal(0, sigmarand[:, :, np.newaxis], (npix, ntod, IFG_SIZE))
 
     # save noise in a npz file
     np.savez("../output/white_noise.npz", noise=sigmarand)
 
     return noise
+
 
 if __name__ == "__main__":
     dust_map_downgraded_mjy, frequencies, sed = sim_dust()
@@ -74,24 +94,40 @@ if __name__ == "__main__":
     pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
-    ifg_scanning = np.zeros((len(pix_ecl), IFG_SIZE))
-    spec_scanning = np.zeros((len(pix_ecl), SPEC_SIZE))
+    ifg_scanning = np.zeros((3, len(pix_ecl), IFG_SIZE))
+    spec_scanning = np.zeros((3, len(pix_ecl), SPEC_SIZE))
+    hit_scanning = np.zeros((3, len(pix_ecl)))
     print("Calculating IFGs for scanning strategy")
     for j in range(3):
         for i, pix in enumerate(pix_ecl[:, j]):
-            ifg_scanning[i] += ifg[pix]/3
-            spec_scanning[i] += spec[pix]/3
+            ifg_scanning[j, i] += ifg[pix]
+            spec_scanning[j, i] += spec[pix]
+            hit_scanning[j, i] += 1
 
     # add noise to ifg
-    ifg_scanning = ifg_scanning + white_noise(ifg_scanning.shape[0])
+    ifg_scanning = ifg_scanning + white_noise(3, ifg_scanning.shape[1])
 
     # bin spec_scanning into spec maps
     spec_map = np.zeros((g.NPIX, g.SPEC_SIZE))
     dd = np.zeros(g.NPIX)
+    hit_map = np.zeros(g.NPIX)
     for i in range(pix_ecl.shape[0]):
         for j in range(pix_ecl.shape[1]):
-            spec_map[pix_ecl[i, j]] += spec_scanning[i] / 3
-            dd[pix_ecl[i, j]] += 1 / 3
+            spec_map[pix_ecl[i, j]] += spec_scanning[j, i]
+            dd[pix_ecl[i, j]] += 1
+            hit_map[pix_ecl[i, j]] += hit_scanning[j, i]
+
+    hp.mollview(
+        hit_map,
+        title="Hit map",
+        unit="Hits",
+        min=0,
+        max=np.max(hit_map),
+        xsize=2000,
+        coord=["E", "G"],
+    )
+    plt.savefig("../output/hit_map_scanning_strategy.png")
+    plt.close()
 
     mask = dd == 0
     spec_map[~mask] = spec_map[~mask] / dd[~mask][:, np.newaxis]
@@ -99,11 +135,23 @@ if __name__ == "__main__":
 
     for i, freq in enumerate(frequencies):
         if g.PNG:
-            hp.mollview(spec_map[:, i], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=200, xsize=2000, coord=['E', 'G'])
+            hp.mollview(
+                spec_map[:, i],
+                title=f"{int(freq):04d} GHz",
+                unit="MJy/sr",
+                min=0,
+                max=200,
+                xsize=2000,
+                coord=["E", "G"],
+            )
             plt.savefig(f"../output/sim_maps/{int(freq):04d}.png")
             plt.close()
         if g.FITS:
-            hp.write_map(f"../output/sim_maps/{int(freq):04d}.fits", spec_map[:, i], overwrite=True)
+            hp.write_map(
+                f"../output/sim_maps/{int(freq):04d}.fits",
+                spec_map[:, i],
+                overwrite=True,
+            )
 
     # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 1")
     # plt.plot(ifg_scanning[np.random.randint(0, ifg_scanning.shape[0]), :], label="IFG 2")

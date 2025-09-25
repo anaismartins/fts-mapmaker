@@ -62,6 +62,7 @@ hp.mollview(
     coord=["E", "G"],
 )
 plt.savefig("../output/hit_map.png")
+hp.write_map("../output/hit_map.fits", hit_map, overwrite=True)
 plt.close()
 
 P = np.zeros((len(start_pix_ecl), 3), dtype=int)
@@ -75,18 +76,44 @@ print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
 
 # plot hit map of the scanning strategy
 npix = hp.nside2npix(g.NSIDE)
-hit_map = np.zeros(npix, dtype=float)
+hit_map_ss = np.zeros(npix, dtype=float)
 for i in range(P.shape[1]):
-    hit_map += np.bincount(P[:, i], minlength=npix) / 3
+    hit_map_ss += np.bincount(P[:, i], minlength=npix) / 3
 
 hp.mollview(
-    hit_map,
+    hit_map_ss,
     title="Scanning Strategy Hit Map",
     unit="Hits",
     min=0,
-    max=hit_map.max(),
+    max=hit_map_ss.max(),
     xsize=2000,
     coord=["E", "G"],
 )
 plt.savefig("../output/scanning_strategy_hit_map.png")
 plt.close()
+
+# compare hit maps
+difference_map = hit_map - hit_map_ss
+hp.mollview(
+    difference_map,
+    title="Hit map - Scanning strategy hit map",
+    unit="Hits",
+    min=-1,
+    max=1,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+plt.show()
+ratio_map = hit_map / hit_map_ss
+print("Ratio between hit map and scanning strategy hit map: ", ratio_map)
+# plot ratio map
+hp.mollview(
+    ratio_map,
+    title="Ratio map hit map / scanning strategy",
+    unit="Hits",
+    min=0.5,
+    max=1.5,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+plt.show()
