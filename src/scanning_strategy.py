@@ -65,10 +65,10 @@ plt.savefig("../output/hit_map.png")
 hp.write_map("../output/hit_map.fits", hit_map, overwrite=True)
 plt.close()
 
-P = np.zeros((len(start_pix_ecl), 3), dtype=int)
-P[:, 0] = start_pix_ecl
-P[:, 1] = middle_pix_ecl
-P[:, 2] = end_pix_ecl
+P = np.zeros((len(start_pix_ecl) * 3), dtype=int)
+P[0 : len(start_pix_ecl)] = start_pix_ecl
+P[len(start_pix_ecl) : len(start_pix_ecl) * 2] = middle_pix_ecl
+P[len(start_pix_ecl) * 2 :] = end_pix_ecl
 
 # save pointing matrix
 np.save("../input/firas_scanning_strategy.npy", P)
@@ -76,9 +76,7 @@ print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
 
 # plot hit map of the scanning strategy
 npix = hp.nside2npix(g.NSIDE)
-hit_map_ss = np.zeros(npix, dtype=float)
-for i in range(P.shape[1]):
-    hit_map_ss += np.bincount(P[:, i], minlength=npix) / 3
+hit_map_ss = np.bincount(P, minlength=npix)
 
 hp.mollview(
     hit_map_ss,

@@ -13,6 +13,7 @@ import utils
 
 d = np.load("../../output/ifgs.npz")["ifg"]
 pix = np.load("../../input/firas_scanning_strategy.npy")
+print(f"Shape of d: {d.shape} and shape of pix: {pix.shape}")
 
 # plot hit map of the scanning strategy
 hit_map = np.bincount(pix[:, 1], minlength=hp.nside2npix(g.NSIDE)).astype(float)
@@ -37,7 +38,7 @@ data_density = np.zeros(npix, dtype=float)
 
 for i in range(pix.shape[0]):
     for j in range(pix.shape[1]):
-        m[pix[i, j]] += np.abs(np.fft.rfft(d[i])) / 3
+        m[pix[i, j]] += np.abs(np.fft.rfft(d[i, j])) / 3
         data_density[pix[i, j]] += 1 / 3
 
 mask = data_density == 0
@@ -60,7 +61,7 @@ for nui in range(len(frequencies)):
             title=f"{int(frequencies[nui]):04d} GHz",
             unit="MJy/sr",
             min=0,
-            max=200,
+            max=50,
             xsize=2000,
             coord=["E", "G"],
         )
