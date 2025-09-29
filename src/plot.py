@@ -43,7 +43,7 @@ def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
                 title=f"{int(frequency):04d} GHz",
                 unit="MJy/sr",
                 min=0,
-                max=200,
+                max=50,
                 coord=["E", "G"],
             )
             try:
@@ -76,7 +76,7 @@ def plot_m_invert(frequencies):
                 m[:, i].real,
                 title=f"{int(frequencies.value[i]):04d} GHz",
                 min=0,
-                max=200,
+                max=50,
                 xsize=2000,
             )
             plt.savefig(f"./test_output/m_invert/{int(frequencies.value[i]):04d}.png")
@@ -108,7 +108,7 @@ def plot_m_cg_per_tod(frequencies):
                 m[:, i].real,
                 title=f"{int(frequencies.value[i]):04d} GHz",
                 min=0,
-                max=200,
+                max=50,
                 xsize=2000,
             )
             plt.savefig(

@@ -43,7 +43,7 @@ def sim_dust():
     return dust_map_downgraded_mjy, frequencies, signal
 
 
-def white_noise(npix, ntod, sigma_min=0.001, sigma_max=0.1):
+def white_noise(ntod, sigma_min=0.001, sigma_max=0.1):
     """
     Generate white noise for the interferograms sampling the noise level from a uniform distribution.
 
@@ -62,8 +62,8 @@ def white_noise(npix, ntod, sigma_min=0.001, sigma_max=0.1):
     noise : array
         Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
     """
-    sigmarand = np.random.uniform(sigma_min, sigma_max, (npix, ntod))
-    noise = np.random.normal(0, sigmarand[:, :, np.newaxis], (npix, ntod, IFG_SIZE))
+    sigmarand = np.random.uniform(sigma_min, sigma_max, (ntod))
+    noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, IFG_SIZE))
 
     # save noise in a npz file
     np.savez("../output/white_noise.npz", noise=sigmarand)
@@ -94,28 +94,26 @@ if __name__ == "__main__":
     pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
-    ifg_scanning = np.zeros((3, len(pix_ecl), IFG_SIZE))
-    spec_scanning = np.zeros((3, len(pix_ecl), SPEC_SIZE))
-    hit_scanning = np.zeros((3, len(pix_ecl)))
+    ifg_scanning = np.zeros((len(pix_ecl), IFG_SIZE))
+    spec_scanning = np.zeros((len(pix_ecl), SPEC_SIZE))
+    hit_scanning = np.zeros((len(pix_ecl)), dtype=int)
     print("Calculating IFGs for scanning strategy")
-    for j in range(3):
-        for i, pix in enumerate(pix_ecl[:, j]):
-            ifg_scanning[j, i] += ifg[pix]
-            spec_scanning[j, i] += spec[pix]
-            hit_scanning[j, i] += 1
+    for pixi, pix in enumerate(pix_ecl):
+        ifg_scanning[pixi] = ifg[pix]
+        spec_scanning[pixi] = spec[pix]
+        hit_scanning[pixi] = 1
 
     # add noise to ifg
-    ifg_scanning = ifg_scanning + white_noise(3, ifg_scanning.shape[1])
+    ifg_scanning = ifg_scanning + white_noise(ifg_scanning.shape[0])
 
     # bin spec_scanning into spec maps
     spec_map = np.zeros((g.NPIX, g.SPEC_SIZE))
     dd = np.zeros(g.NPIX)
     hit_map = np.zeros(g.NPIX)
-    for i in range(pix_ecl.shape[0]):
-        for j in range(pix_ecl.shape[1]):
-            spec_map[pix_ecl[i, j]] += spec_scanning[j, i]
-            dd[pix_ecl[i, j]] += 1
-            hit_map[pix_ecl[i, j]] += hit_scanning[j, i]
+    for pixi, pix in enumerate(pix_ecl):
+        spec_map[pix] += spec_scanning[pixi]
+        dd[pix] += 1
+        hit_map[pix] += hit_scanning[pixi]
 
     hp.mollview(
         hit_map,
@@ -140,7 +138,7 @@ if __name__ == "__main__":
                 title=f"{int(freq):04d} GHz",
                 unit="MJy/sr",
                 min=0,
-                max=200,
+                max=50,
                 xsize=2000,
                 coord=["E", "G"],
             )

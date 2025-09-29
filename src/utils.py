@@ -1,8 +1,8 @@
 import astropy.constants as const
 import astropy.units as u
-import numpy as np
 import healpy as hp
 import matplotlib.pyplot as plt
+import numpy as np
 
 channels = {"rh": 0, "rl": 1, "lh": 2, "ll": 3}
 
@@ -47,9 +47,15 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
         Dust SED in MJy/sr.
     """
     gamma = const.h / (const.k_B * T_d)
-    s_d = (A_d * (nu/nu_0)**(beta_d+1) * (np.exp(gamma * nu_0) - 1)/(np.exp(gamma * nu) - 1)).to(u.MJy/u.sr, equivalencies=u.brightness_temperature(nu_0))
-    
+    s_d = (
+        A_d
+        * (nu / nu_0) ** (beta_d + 1)
+        * (np.exp(gamma * nu_0) - 1)
+        / (np.exp(gamma * nu) - 1)
+    ).to(u.MJy / u.sr, equivalencies=u.brightness_temperature(nu_0))
+
     return s_d
+
 
 def generate_frequencies(channel, mode, nfreq=None):
     """
@@ -78,7 +84,14 @@ def generate_frequencies(channel, mode, nfreq=None):
 
     nu0 = {"ss": 68.020812, "lf": 23.807283}
     dnu = {"ss": 13.604162, "lf": 3.4010405}
-    nf = {"lh_ss": 210, "ll_lf": 182, "ll_ss": 43, "rh_ss": 210, "rl_lf": 182, "rl_ss": 43}
+    nf = {
+        "lh_ss": 210,
+        "ll_lf": 182,
+        "ll_ss": 43,
+        "rh_ss": 210,
+        "rl_lf": 182,
+        "rl_ss": 43,
+    }
 
     if not (mode == "lf" and (channel_str == "lh" or channel_str == "rh")):
         if nfreq == None:
@@ -95,8 +108,16 @@ def generate_frequencies(channel, mode, nfreq=None):
 
     return f_ghz
 
-def save_mollview(m, f_ghz, save_path, max_amp=200, norm='linear'):
+
+def save_mollview(m, f_ghz, save_path, max_amp=50, norm="linear"):
     for freqi, frequency in enumerate(f_ghz):
-        hp.mollview(m[:, freqi], title=f"{int(frequency):04d} GHz", min=1, max=max_amp, unit="MJy/sr", norm=norm)
+        hp.mollview(
+            m[:, freqi],
+            title=f"{int(frequency):04d} GHz",
+            min=1,
+            max=max_amp,
+            unit="MJy/sr",
+            norm=norm,
+        )
         plt.savefig(f"{save_path}{int(frequency):04d}.png")
         plt.close()
