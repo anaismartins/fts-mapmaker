@@ -27,28 +27,25 @@ if __name__ == "__main__":
 
     numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
     denominator = np.zeros(npix, dtype=float)
-    for pixi in range(3):
-        for xi in range(g.IFG_SIZE):
-            numerator[:, xi] += (
-                np.bincount(
-                    P[pixi],
-                    weights=d[pixi, :, xi] / sigma[pixi] ** 2,
-                    minlength=npix,
-                )
-                / 3
+    for xi in range(g.IFG_SIZE):
+        numerator[:, xi] += (
+            np.bincount(
+                P,
+                weights=d[:, xi] / sigma**2,
+                minlength=npix,
             )
-    denominator += (
-        np.bincount(P[pixi], weights=1 / sigma[pixi] ** 2, minlength=npix) / 3
-    )
+            / 3
+        )
+    denominator += np.bincount(P, weights=1 / sigma**2, minlength=npix) / 3
 
     print(
         f"Numerator and denominator calculated. Shape of denominator: {denominator.shape}"
     )
-    # m = np.zeros_like(numerator)
-    # mask = denominator == 0
-    # m[~mask] = numerator[~mask] / denominator[~mask][:, np.newaxis]
-    # m[mask] = np.nan
-    m = numerator / denominator[:, np.newaxis]
+    m = np.zeros_like(numerator)
+    mask = denominator == 0
+    m[~mask] = numerator[~mask] / denominator[~mask][:, np.newaxis]
+    m[mask] = np.nan
+    # m = numerator / denominator[:, np.newaxis]
     print("Divided")
     m = np.fft.rfft(m, axis=1)
 
@@ -62,6 +59,7 @@ if __name__ == "__main__":
                 f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.fits",
                 np.abs(m[:, nui]),
                 overwrite=True,
+                dtype=np.float64,
             )
         if g.PNG:
             hp.mollview(

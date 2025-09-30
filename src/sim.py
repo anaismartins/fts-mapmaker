@@ -43,7 +43,7 @@ def sim_dust():
     return dust_map_downgraded_mjy, frequencies, signal
 
 
-def white_noise(ntod, sigma_min=0.001, sigma_max=0.1):
+def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
     """
     Generate white noise for the interferograms sampling the noise level from a uniform distribution.
 
@@ -57,13 +57,19 @@ def white_noise(ntod, sigma_min=0.001, sigma_max=0.1):
         Standard deviation minimum value for the uniform distribution.
     sigma_max : float
         Standard deviation maximum value for the uniform distribution.
+    ifg : bool
+        If True, generate noise for interferograms (IFG_SIZE). If False, generate noise for spectra (SPEC_SIZE).
     Returns
     -------
     noise : array
         Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
     """
     sigmarand = np.random.uniform(sigma_min, sigma_max, (ntod))
-    noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, IFG_SIZE))
+    if ifg:
+        size = IFG_SIZE
+    else:
+        size = SPEC_SIZE
+    noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, size))
 
     # save noise in a npz file
     np.savez("../output/white_noise.npz", noise=sigmarand)
@@ -105,6 +111,9 @@ if __name__ == "__main__":
 
     # add noise to ifg
     ifg_scanning = ifg_scanning + white_noise(ifg_scanning.shape[0])
+
+    # add white noise to spec to see how it looks in the difference/ratio
+    spec_scanning = spec_scanning + white_noise(spec_scanning.shape[0], ifg=False)
 
     # bin spec_scanning into spec maps
     spec_map = np.zeros((g.NPIX, g.SPEC_SIZE))
