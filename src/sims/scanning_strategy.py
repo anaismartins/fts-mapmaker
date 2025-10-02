@@ -8,7 +8,10 @@ import numpy as np
 import globals as g
 
 
-def generate_scanning_strategy(ecl_lat, npixperifg):
+def generate_scanning_strategy(ecl_lat, scan, npixperifg):
+    # times each mode takes for a full telemetered interferogram (in seconds)
+    times = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
+
     speed = 3.5  # degrees per minute
     speed = speed / 60  # degrees per second
 
@@ -20,19 +23,19 @@ def generate_scanning_strategy(ecl_lat, npixperifg):
         if npixperifg % 2 == 0:
             for i in range(npixperifg // 2):
                 ecl_lats[npixperifg // 2 + i] = (
-                    ecl_lat + speed * times["ss"] * scan_ss * (1 + i * 2) / npixperifg
+                    ecl_lat + speed * times["ss"] * scan * (1 + i * 2) / npixperifg
                 )
                 ecl_lats[npixperifg // 2 - (i + 1)] = (
-                    ecl_lat - speed * times["ss"] * scan_ss * (1 + i * 2) / npixperifg
+                    ecl_lat - speed * times["ss"] * scan * (1 + i * 2) / npixperifg
                 )
         else:
             ecl_lats[npixperifg // 2] = ecl_lat
             for i in range(1, npixperifg // 2 + 1):
                 ecl_lats[npixperifg // 2 + i] = (
-                    ecl_lat + speed * times["ss"] * scan_ss * (i * 2) / npixperifg
+                    ecl_lat + speed * times["ss"] * scan * (i * 2) / npixperifg
                 )
                 ecl_lats[npixperifg // 2 - i] = (
-                    ecl_lat - speed * times["ss"] * scan_ss * (i * 2) / npixperifg
+                    ecl_lat - speed * times["ss"] * scan * (i * 2) / npixperifg
                 )
     else:
         ecl_lats = ecl_lat
@@ -73,9 +76,6 @@ mtm_speed = sky_data["df_data"]["mtm_speed"][:]
 mtm_length = sky_data["df_data"]["mtm_length"][:]
 scan = sky_data["df_data"]["scan"][:]  # up is 1, down is -1
 
-# times each mode takes for a full telemetered interferogram (in seconds)
-times = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
-
 # only using short slow for the simulations
 short_slow_filter = (mtm_speed == 0) & (mtm_length == 0)
 ecl_lat_ss = ecl_lat[short_slow_filter]
@@ -83,7 +83,7 @@ ecl_lon_ss = ecl_lon[short_slow_filter]
 scan_ss = scan[short_slow_filter]
 
 npixperifg = 3
-pix_ecl = generate_scanning_strategy(ecl_lat_ss, npixperifg)
+pix_ecl = generate_scanning_strategy(ecl_lat_ss, scan_ss, npixperifg)
 
 npix = hp.nside2npix(g.NSIDE)
 
