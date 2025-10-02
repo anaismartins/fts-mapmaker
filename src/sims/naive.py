@@ -113,7 +113,7 @@ for i, freq in enumerate(frequencies):
 print("Saving IFGs to file")
 
 # save ifg products in a npz file
-np.savez("../output/naive.npz", ifg=ifg_scanning)
+np.savez("../output/ifgs_naive.npz", ifg=ifg_scanning)
 
 time_end = time.time()
 print(f"Time elapsed for IFGs: {(time_end - time_start)/60} minutes")
