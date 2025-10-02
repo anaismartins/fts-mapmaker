@@ -1,7 +1,7 @@
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-from sim import sim_dust
+from sims.naive import sim_dust
 
 dust_map_downgraded_mjy, frequencies, signal = sim_dust()
 dust_map = dust_map_downgraded_mjy[:, np.newaxis] * signal[np.newaxis, :]

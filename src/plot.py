@@ -6,7 +6,7 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sim import sim_dust
+from sims.naive import sim_dust
 from src.globals import FITS, PNG
 
 current = os.path.dirname(os.path.realpath(__file__))
