@@ -16,7 +16,7 @@ if __name__ == "__main__":
     d = np.load("../output/ifgs.npz")["ifg"]
     d = np.roll(d, -360, axis=1)
 
-    sigma = np.load("../output/white_noise.npz")["noise"]
+    # sigma = np.load("../output/white_noise.npz")["noise"]
 
     npix = hp.nside2npix(g.NSIDE)
     P = np.load("../input/firas_scanning_strategy.npy")

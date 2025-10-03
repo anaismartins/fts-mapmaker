@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
-import sims.scanning_strategy as scanning_strategy
 import sims.utils as sims
+from sims.scanning_strategy import generate_scanning_strategy
 
 dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust()
 sed = np.nan_to_num(sed)
@@ -34,7 +34,7 @@ ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
 scan = sky_data["df_data"]["scan"][ss_filter]
 
 npixperifg = 512
-pix_ecl = scanning_strategy.generate_scanning_strategy(ecl_lat, scan, npixperifg)
+pix_ecl = generate_scanning_strategy(ecl_lat, scan, npixperifg)
 print(f"Shape of pix_ecl: {pix_ecl.shape} and of spec: {spec.shape}")
 
 ifg = np.fft.irfft(spec, axis=1)
@@ -57,7 +57,8 @@ plt.savefig(f"../output/sim_ifgs_modern/{n}.png")
 plt.close()
 
 # add white noise
-ifg_scanning = ifg_scanning + sims.white_noise(ifg_scanning.shape[0])
+noise, sigma = sims.white_noise(ifg_scanning.shape[0])
+ifg_scanning = ifg_scanning + noise
 
-np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl)
+np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")
