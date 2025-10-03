@@ -119,7 +119,7 @@ hp.mollview(
     coord=["E", "G"],
 )
 hp.graticule()
-plt.savefig("../output/compare/difference_map_white_noise.png")
+plt.savefig("../output/compare/difference_maps/white_noise.png")
 plt.close()
 ratio_map = simulated_map / white_noise_map
 print("Ratio between simulated map and white noise mapmaker: ", ratio_map)
@@ -134,7 +134,7 @@ hp.mollview(
     coord=["E", "G"],
 )
 hp.graticule()
-plt.savefig("../output/compare/ratio_map_white_noise.png")
+plt.savefig("../output/compare/ratio_maps/white_noise.png")
 plt.close()
 
 # compare naive mapmaker with maps made from the sed
@@ -162,7 +162,7 @@ hp.mollview(
     norm="hist",
 )
 hp.graticule()
-plt.savefig("../output/compare/difference_map_binned.png")
+plt.savefig("../output/compare/difference_maps/binned.png")
 plt.close()
 ratio_map = simulated_map / binned_mapmaker
 print("Ratio between simulated map and binned mapmaker: ", ratio_map)
@@ -178,7 +178,7 @@ hp.mollview(
     norm="hist",
 )
 hp.graticule()
-plt.savefig("../output/compare/ratio_map_binned.png")
+plt.savefig("../output/compare/ratio_maps/binned.png")
 plt.close()
 
 # compare binned mapmaker with white noise mapmaker
@@ -192,21 +192,21 @@ hp.mollview(
     cmap="RdBu_r",
     coord=["E", "G"],
 )
-plt.savefig("../output/compare/difference_map_binned_white_noise.png")
+plt.savefig("../output/compare/difference_maps/binned_white_noise.png")
 plt.close()
 ratio_map = binned_mapmaker / white_noise_map
 print("Ratio between binned mapmaker and white noise mapmaker: ", ratio_map)
 # plot ratio map
 hp.mollview(
     ratio_map,
-    title="Ratio map binned / white noise",
+    title="Binned / White noise mapmakers @ 544 GHz",
     unit="MJy/sr",
     min=0.5,
     max=1.5,
     cmap="RdBu_r",
     coord=["E", "G"],
 )
-plt.savefig("../output/compare/ratio_map_binned_white_noise.png")
+plt.savefig("../output/compare/ratio_maps/binned_white_noise.png")
 plt.close()
 
 # do the same but for all frequencies
@@ -309,25 +309,26 @@ plt.close()
 difference_map = simulated_map - simulated_map_with_scanning
 difference_map[simulated_map_with_scanning == 0] = np.nan
 print(f"Difference between simulated map and simulated with scanning: {difference_map}")
-hp.mollview(
-    difference_map,
-    title="Simulated - Simulated with scanning",
-    unit="MJy/sr",
-    min=-1,
-    max=1,
-    cmap="RdBu_r",
-    coord=["E", "G"],
-)
-hp.graticule()
-plt.savefig("../output/compare/difference_map_scanning.png")
-plt.close()
+if g.PNG:
+    hp.mollview(
+        difference_map,
+        title="Simulated - Simulated with scanning",
+        unit="MJy/sr",
+        min=-1,
+        max=1,
+        cmap="RdBu_r",
+        coord=["E", "G"],
+    )
+    hp.graticule()
+    plt.savefig("../output/compare/difference_maps/scanning.png")
+    plt.close()
 ratio_map = simulated_map / simulated_map_with_scanning
 ratio_map[simulated_map_with_scanning == 0] = np.nan
 print(f"Ratio between simulated map and simulated with scanning: {ratio_map}")
 # plot ratio map
 hp.mollview(
     ratio_map,
-    title="Ratio map simulated / simulated with scanning",
+    title="Simulated / Simulated with scanning @ 544 GHz",
     unit="MJy/sr",
     min=0.5,
     max=1.5,
@@ -335,6 +336,6 @@ hp.mollview(
     coord=["E", "G"],
 )
 hp.graticule()
-plt.savefig("../output/compare/ratio_map_scanning.png")
+plt.savefig("../output/compare/ratio_maps/scanning.png")
 
 # compare hit maps

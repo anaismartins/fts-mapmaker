@@ -42,9 +42,9 @@ ifg = np.roll(ifg, 360, axis=1)
 ifg = ifg.real
 
 # now we frankenstein the IFGs together
-ifg_scanning = np.zeros((len(pix_ecl[0]), g.IFG_SIZE))
+ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE))
 for i in range(npixperifg):
-    for pixi, pix in enumerate(pix_ecl[i]):
+    for pixi, pix in enumerate(pix_ecl[:, i]):
         ifg_scanning[pixi, i] = ifg[pix, i]
 
 print(f"Shape of ifg_scanning: {ifg_scanning.shape}")
@@ -58,12 +58,6 @@ plt.close()
 
 # add white noise
 ifg_scanning = ifg_scanning + sims.white_noise(ifg_scanning.shape[0])
-
-print(f"Shape of ifg_scanning after repeat: {ifg_scanning.shape}")
-
-# reshape also pix_ecl
-pix_ecl = pix_ecl.flatten()
-print(f"Shape of pix_ecl after flatten: {pix_ecl.shape}")
 
 np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl)
 print("Saved IFGs")
