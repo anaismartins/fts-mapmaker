@@ -19,22 +19,22 @@ def generate_scanning_strategy(ecl_lat, scan, npixperifg):
     print(f"Shape of ecl_lat: {ecl_lat.shape}")
 
     if npixperifg > 1:
-        ecl_lats = np.zeros((npixperifg, len(ecl_lat)))
+        ecl_lats = np.zeros((len(ecl_lat), npixperifg))
         if npixperifg % 2 == 0:
             for i in range(npixperifg // 2):
-                ecl_lats[npixperifg // 2 + i] = (
+                ecl_lats[:, npixperifg // 2 + i] = (
                     ecl_lat + speed * times["ss"] * scan * (1 + i * 2) / npixperifg
                 )
-                ecl_lats[npixperifg // 2 - (i + 1)] = (
+                ecl_lats[:, npixperifg // 2 - (i + 1)] = (
                     ecl_lat - speed * times["ss"] * scan * (1 + i * 2) / npixperifg
                 )
         else:
-            ecl_lats[npixperifg // 2] = ecl_lat
+            ecl_lats[:, npixperifg // 2] = ecl_lat
             for i in range(1, npixperifg // 2 + 1):
-                ecl_lats[npixperifg // 2 + i] = (
+                ecl_lats[:, npixperifg // 2 + i] = (
                     ecl_lat + speed * times["ss"] * scan * (i * 2) / npixperifg
                 )
-                ecl_lats[npixperifg // 2 - i] = (
+                ecl_lats[:, npixperifg // 2 - i] = (
                     ecl_lat - speed * times["ss"] * scan * (i * 2) / npixperifg
                 )
     else:
@@ -50,7 +50,7 @@ def generate_scanning_strategy(ecl_lat, scan, npixperifg):
         f"Maximum latitude: {np.max(ecl_lats)} and minimum latitude: {np.min(ecl_lats)}"
     )
 
-    pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon_ss, ecl_lats, lonlat=True)
+    pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon_ss[:, np.newaxis], ecl_lats, lonlat=True)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
     # P = np.zeros((len(start_pix_ecl) * npixperifg), dtype=int)
@@ -84,13 +84,14 @@ scan_ss = scan[short_slow_filter]
 
 npixperifg = 3
 pix_ecl = generate_scanning_strategy(ecl_lat_ss, scan_ss, npixperifg)
+print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
 npix = hp.nside2npix(g.NSIDE)
 
 # remake hit map
 hit_map = np.zeros(npix, dtype=float)
 for i in range(pix_ecl.shape[0]):
-    hit_map[pix_ecl[npixperifg // 2, i]] += 1
+    hit_map[pix_ecl[i, npixperifg // 2]] += 1
 hp.mollview(
     hit_map,
     title="Hit Map",
@@ -100,14 +101,17 @@ hp.mollview(
     xsize=2000,
     coord=["E", "G"],
 )
-plt.savefig("../output/hit_map.png")
-hp.write_map("../output/hit_map.fits", hit_map, overwrite=True)
-plt.close()
+if g.PNG:
+    plt.savefig("../output/hit_map.png")
+    plt.close()
+if g.FITS:
+    hp.write_map("../output/hit_map.fits", hit_map, overwrite=True)
 
-P = np.zeros((len(pix_ecl[0]) * npixperifg), dtype=int)
-P[0 : len(pix_ecl[0])] = pix_ecl[0]
-P[len(pix_ecl[0]) : len(pix_ecl[0]) * 2] = pix_ecl[1]
-P[len(pix_ecl[0]) * 2 :] = pix_ecl[2]
+
+P = np.zeros((len(pix_ecl) * npixperifg), dtype=int)
+P[0 : len(pix_ecl)] = pix_ecl[:, 0]
+P[len(pix_ecl) : len(pix_ecl) * 2] = pix_ecl[:, 1]
+P[len(pix_ecl) * 2 :] = pix_ecl[:, 2]
 
 # save pointing matrix
 np.save("../input/firas_scanning_strategy.npy", P)
