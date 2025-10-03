@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # sigma = np.load("../output/white_noise.npz")["noise"]
 
     npix = hp.nside2npix(g.NSIDE)
-    P = np.load("../input/firas_scanning_strategy.npy")
+    # P = np.load("../input/firas_scanning_strategy.npy")
 
     print(
         f"Shape of d: {d.shape} and shape of P: {P.shape} and shape of sigma: {sigma.shape}"
