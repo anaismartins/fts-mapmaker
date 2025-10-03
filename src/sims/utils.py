@@ -61,6 +61,6 @@ def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
     noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, size))
 
     # save noise in a npz file
-    np.savez("../output/white_noise.npz", noise=sigmarand)
+    # np.savez("../output/white_noise.npz", noise=sigmarand)
 
-    return noise
+    return noise, sigmarand
