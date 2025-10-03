@@ -11,9 +11,11 @@ sys.path.append(parent)
 import globals as g
 import utils
 
-d = np.load("../../output/ifgs.npz")["ifg"]
-pix = np.load("../../input/firas_scanning_strategy.npy")
-print(f"Shape of d: {d.shape} and shape of pix: {pix.shape}")
+# d = np.load("../../output/ifgs.npz")["ifg"]
+data = np.load("../output/ifgs_modern.npz")
+ifgs = data["ifg"]
+pix = data["pix"]
+print(f"Shape of ifgs: {ifgs.shape} and shape of pix: {pix.shape}")
 
 # plot hit map of the scanning strategy
 hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE)).astype(float)
@@ -27,7 +29,7 @@ hp.mollview(
     max=hit_map.max(),
     xsize=2000,
 )
-plt.savefig("../../output/scanning_strategy_hit_map.png")
+plt.savefig("../output/scanning_strategy_hit_map.png")
 plt.close()
 
 npix = hp.nside2npix(g.NSIDE)
@@ -37,7 +39,7 @@ m = np.zeros((npix, 257), dtype=complex)
 data_density = np.zeros(npix, dtype=float)
 
 for i in range(pix.shape[0]):
-    m[pix[i]] += np.abs(np.fft.rfft(d[i]))
+    m[pix[i]] += np.abs(np.fft.rfft(ifgs[i]))
     data_density[pix[i]] += 1
 
 mask = data_density == 0
@@ -50,7 +52,7 @@ print("Finished generating map cube, saving to disk...")
 for nui in range(len(frequencies)):
     if g.FITS:
         hp.write_map(
-            f"../../output/binned_mapmaker/{int(frequencies[nui]):04d}.fits",
+            f"../output/binned_mapmaker/{int(frequencies[nui]):04d}.fits",
             np.abs(m[:, nui]),
             overwrite=True,
             dtype=np.float64,
@@ -65,6 +67,6 @@ for nui in range(len(frequencies)):
             xsize=2000,
             coord=["E", "G"],
         )
-        plt.savefig(f"../../output/binned_mapmaker/{int(frequencies[nui]):04d}.png")
+        plt.savefig(f"../output/binned_mapmaker/{int(frequencies[nui]):04d}.png")
         plt.close()
         plt.clf()

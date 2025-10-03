@@ -4,6 +4,7 @@ It assumes the same speeds as FIRAS, but without summing up on-board IFGs which 
 """
 
 import os
+import random
 
 import h5py
 import matplotlib.pyplot as plt
@@ -32,7 +33,7 @@ ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
 ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
 scan = sky_data["df_data"]["scan"][ss_filter]
 
-npixperifg = 2
+npixperifg = 512
 pix_ecl = scanning_strategy.generate_scanning_strategy(ecl_lat, scan, npixperifg)
 print(f"Shape of pix_ecl: {pix_ecl.shape} and of spec: {spec.shape}")
 
@@ -44,19 +45,25 @@ ifg = ifg.real
 ifg_scanning = np.zeros((len(pix_ecl[0]), g.IFG_SIZE))
 for i in range(npixperifg):
     for pixi, pix in enumerate(pix_ecl[i]):
-        ifg_scanning[pixi][
-            i * g.IFG_SIZE // npixperifg : (i + 1) * g.IFG_SIZE // npixperifg
-        ] = ifg[pix][i * g.IFG_SIZE // npixperifg : (i + 1) * g.IFG_SIZE // npixperifg]
+        ifg_scanning[pixi, i] = ifg[pix, i]
 
 print(f"Shape of ifg_scanning: {ifg_scanning.shape}")
 
-plt.plot(ifg_scanning[::100, :].T)
-plt.title("Some example IFGs")
+n = random.randint(0, ifg_scanning.shape[0])
+plt.plot(ifg_scanning[n])
+plt.title(f"IFG {n}")
 plt.ylabel("Interferogram")
-plt.savefig("../output/simulated_ifgs_modern.png")
+plt.savefig(f"../output/sim_ifgs_modern/{n}.png")
 plt.close()
 
 # add white noise
 ifg_scanning = ifg_scanning + sims.white_noise(ifg_scanning.shape[0])
-np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning)
+
+print(f"Shape of ifg_scanning after repeat: {ifg_scanning.shape}")
+
+# reshape also pix_ecl
+pix_ecl = pix_ecl.flatten()
+print(f"Shape of pix_ecl after flatten: {pix_ecl.shape}")
+
+np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl)
 print("Saved IFGs")
