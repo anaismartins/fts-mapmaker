@@ -45,7 +45,7 @@ def generate_scanning_strategy(ecl_lat, scan, npixperifg):
     # adjust latitudes to be in the range [-90, 90]
     ecl_lats[ecl_lats < -90] = -ecl_lats[ecl_lats < -90] - 180
     ecl_lats[ecl_lats > 90] = 180 - ecl_lats[ecl_lats > 90]
-    print(f"ecl_lats after adjustment: {ecl_lats}")
+    # print(f"ecl_lats after adjustment: {ecl_lats}")
     print(
         f"Maximum latitude: {np.max(ecl_lats)} and minimum latitude: {np.min(ecl_lats)}"
     )
