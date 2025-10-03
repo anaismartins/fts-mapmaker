@@ -33,7 +33,7 @@ ifg = ifg.real
 
 # introduce scanning strategy
 # pix_gal = np.load("../input/firas_scanning_strategy.npy").astype(int)
-pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
+# pix_ecl = np.load("../input/firas_scanning_strategy.npy").astype(int)
 print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
 ifg_scanning = np.zeros((len(pix_ecl), IFG_SIZE))

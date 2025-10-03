@@ -8,7 +8,7 @@ import numpy as np
 import globals as g
 
 
-def generate_scanning_strategy(ecl_lat, scan, npixperifg):
+def generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg):
     # times each mode takes for a full telemetered interferogram (in seconds)
     times = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
 
@@ -37,20 +37,32 @@ def generate_scanning_strategy(ecl_lat, scan, npixperifg):
                 ecl_lats[:, npixperifg // 2 - i] = (
                     ecl_lat - speed * times["ss"] * scan * (i * 2) / npixperifg
                 )
-    else:
+    elif npixperifg == 1:
         ecl_lats = ecl_lat
+    else:
+        raise ValueError("npixperifg must be at least 1")
 
     # print(f"ecl_lats: {ecl_lats}")
-
-    # adjust latitudes to be in the range [-90, 90]
-    ecl_lats[ecl_lats < -90] = -ecl_lats[ecl_lats < -90] - 180
-    ecl_lats[ecl_lats > 90] = 180 - ecl_lats[ecl_lats > 90]
-    # print(f"ecl_lats after adjustment: {ecl_lats}")
     print(
         f"Maximum latitude: {np.max(ecl_lats)} and minimum latitude: {np.min(ecl_lats)}"
     )
 
-    pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon_ss[:, np.newaxis], ecl_lats, lonlat=True)
+    for i in range(npixperifg):
+        if i == npixperifg // 2:
+            continue
+        # adjust latitudes to be in the range [-90, 90]
+        ecl_lats[:, i][ecl_lats[:, i] < -90] = (
+            -ecl_lats[:, i][ecl_lats[:, i] < -90] - 180
+        )
+        ecl_lats[:, i][ecl_lats[:, i] > 90] = 180 - ecl_lats[:, i][ecl_lats[:, i] > 90]
+
+    pix_ecl = np.zeros((len(ecl_lat), npixperifg), dtype=int)
+    if npixperifg > 1:
+        for i in range(npixperifg):
+            pix_ecl[:, i] = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats[:, i], lonlat=True)
+    else:
+        pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats, lonlat=True)
+    # pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon[:, np.newaxis], ecl_lats, lonlat=True)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
     # P = np.zeros((len(start_pix_ecl) * npixperifg), dtype=int)
@@ -59,6 +71,7 @@ def generate_scanning_strategy(ecl_lat, scan, npixperifg):
     # P[0 : len(start_pix_ecl)] = start_pix_ecl
     # P[len(start_pix_ecl) : len(start_pix_ecl) * 2] = middle_pix_ecl
     # P[len(start_pix_ecl) * 2 :] = end_pix_ecl
+    print(f"pix_ecl inside function: {pix_ecl}")
     return pix_ecl
 
 
@@ -71,18 +84,21 @@ if __name__ == "__main__":
         "r",
     )
 
-    ecl_lat = sky_data["df_data"]["ecl_lat"][:]
-    ecl_lon = sky_data["df_data"]["ecl_lon"][:]
     mtm_speed = sky_data["df_data"]["mtm_speed"][:]
     mtm_length = sky_data["df_data"]["mtm_length"][:]
-    scan = sky_data["df_data"]["scan"][:]  # up is 1, down is -1
-    pix_ecl = sky_data["df_data"]["pix_ecl"][:].astype(int)
+    ss_filter = (mtm_speed == 0) & (mtm_length == 0)
+
+    ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
+    ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
+    scan = sky_data["df_data"]["scan"][ss_filter]  # up is 1, down is -1
+    # pix_ecl = sky_data["df_data"]["pix_ecl"][:].astype(int)
+
+    pix_ecl_original = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lat, lonlat=True)
+    print(f"pix_ecl from beginning: {pix_ecl_original}")
 
     # plot original hit map
     npix = hp.nside2npix(g.NSIDE)
-    original_hit_map = np.zeros(npix, dtype=float)
-    for pix in pix_ecl:
-        original_hit_map[pix] += 1
+    original_hit_map = np.bincount(pix_ecl_original, minlength=npix)
     if g.PNG:
         hp.mollview(
             original_hit_map,
@@ -100,22 +116,15 @@ if __name__ == "__main__":
             "../output/hit_maps/original.fits", original_hit_map, overwrite=True
         )
 
-    # only using short slow for the simulations
-    short_slow_filter = (mtm_speed == 0) & (mtm_length == 0)
-    ecl_lat_ss = ecl_lat[short_slow_filter]
-    ecl_lon_ss = ecl_lon[short_slow_filter]
-    scan_ss = scan[short_slow_filter]
-
-    npixperifg = 3
-    pix_ecl = generate_scanning_strategy(ecl_lat_ss, scan_ss, npixperifg)
+    npixperifg = 512
+    pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
     npix = hp.nside2npix(g.NSIDE)
 
     # remake hit map
-    hit_map = np.zeros(npix, dtype=float)
-    for i in range(pix_ecl.shape[0]):
-        hit_map[pix_ecl[i, npixperifg // 2]] += 1
+    hit_map = np.bincount(pix_ecl[:, npixperifg // 2], minlength=npix)
+    # hit_map = np.bincount(pix_ecl, minlength=npix)
     hp.mollview(
         hit_map,
         title="Hit Map",
@@ -131,18 +140,15 @@ if __name__ == "__main__":
     if g.FITS:
         hp.write_map("../output/hit_maps/remade.fits", hit_map, overwrite=True)
 
-    P = np.zeros((len(pix_ecl) * npixperifg), dtype=int)
-    P[0 : len(pix_ecl)] = pix_ecl[:, 0]
-    P[len(pix_ecl) : len(pix_ecl) * 2] = pix_ecl[:, 1]
-    P[len(pix_ecl) * 2 :] = pix_ecl[:, 2]
+    P = pix_ecl.flatten()
 
     # save pointing matrix
-    np.save("../input/firas_scanning_strategy.npy", P)
-    print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
+    # np.save("../input/firas_scanning_strategy.npy", P)
+    # print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
 
     # plot hit map of the scanning strategy
     npix = hp.nside2npix(g.NSIDE)
-    hit_map_ss = np.bincount(P, minlength=npix)
+    hit_map_ss = np.bincount(P, minlength=npix) / npixperifg
 
     if g.PNG:
         hp.mollview(

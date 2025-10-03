@@ -18,21 +18,23 @@ pix = data["pix"]
 print(f"Shape of ifgs: {ifgs.shape} and shape of pix: {pix.shape}")
 
 # plot hit map of the scanning strategy
-hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE)).astype(float)
+npix = hp.nside2npix(g.NSIDE)
+hit_map = np.bincount(pix.flatten(), minlength=npix).astype(float)
 mask = hit_map == 0
 hit_map[mask] = hp.UNSEEN
-hp.mollview(
-    hit_map,
-    title="Scanning Strategy Hit Map",
-    unit="Hits",
-    min=0,
-    max=hit_map.max(),
-    xsize=2000,
-)
-plt.savefig("../output/scanning_strategy_hit_map.png")
-plt.close()
+if g.PNG:
+    hp.mollview(
+        hit_map / 512,
+        title="Scanning Strategy Hit Map",
+        unit="Hits",
+        min=0,
+        max=(hit_map / 512).max(),
+        xsize=2000,
+        coord=["E", "G"],
+    )
+    plt.savefig("../output/hit_maps/scanning_strategy.png")
+    plt.close()
 
-npix = hp.nside2npix(g.NSIDE)
 frequencies = utils.generate_frequencies("ll", "ss", 257)
 
 m = np.zeros((npix, 257), dtype=complex)
