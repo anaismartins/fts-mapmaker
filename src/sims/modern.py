@@ -7,6 +7,7 @@ import os
 import random
 
 import h5py
+import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -34,7 +35,7 @@ ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
 scan = sky_data["df_data"]["scan"][ss_filter]
 
 npixperifg = 512
-pix_ecl = generate_scanning_strategy(ecl_lat, scan, npixperifg)
+pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
 print(f"Shape of pix_ecl: {pix_ecl.shape} and of spec: {spec.shape}")
 
 ifg = np.fft.irfft(spec, axis=1)
@@ -56,9 +57,16 @@ plt.ylabel("Interferogram")
 plt.savefig(f"../output/sim_ifgs_modern/{n}.png")
 plt.close()
 
+# plot pixels hit on a map
+print(f"Pixels hit: {np.unique(pix_ecl[n])}")
+npix = hp.nside2npix(g.NSIDE)
+map_pix = np.bincount(pix_ecl[n], minlength=npix)
+hp.mollview(map_pix, coord="E", title="Pixels hit")
+plt.savefig(f"../output/pix_hits/{n}.png")
+
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0])
-ifg_scanning = ifg_scanning + noise
+ifg_scanning = ifg_scanning  # + noise
 
 np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")

@@ -37,16 +37,24 @@ if g.PNG:
 
 frequencies = utils.generate_frequencies("ll", "ss", 257)
 
-m = np.zeros((npix, 257), dtype=complex)
-data_density = np.zeros(npix, dtype=float)
+m_ifg = np.zeros((npix, g.IFG_SIZE), dtype=float)
+data_density = np.zeros((npix), dtype=float)
 
 for i in range(pix.shape[0]):
-    m[pix[i]] += np.abs(np.fft.rfft(ifgs[i]))
+    m_ifg[pix[i]] += ifgs[i]
+    # spec = np.abs(np.fft.rfft(ifgs[i]))
+    # print(f"pix[i].shape: {pix[i].shape} and spec shape: {spec.shape}")
+    # m[pix[i]] += spec
     data_density[pix[i]] += 1
+    # print(f"pix hit: {pix[i]}")
+    # print(f"data_density[pix[i]] shape: {data_density[pix[i]].shape}")
+    # print(f"data_density[pix[i]]: {data_density[pix[i]]}")
 
 mask = data_density == 0
-m[~mask] = m[~mask] / data_density[~mask][:, np.newaxis]
-m[mask] = np.nan
+m_ifg[~mask] = m_ifg[~mask] / data_density[~mask][:, np.newaxis]
+m_ifg[mask] = np.nan
+
+m = np.abs(np.fft.rfft(m_ifg, axis=1))
 
 print("Finished generating map cube, saving to disk...")
 
