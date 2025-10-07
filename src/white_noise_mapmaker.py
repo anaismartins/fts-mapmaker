@@ -17,6 +17,7 @@ if __name__ == "__main__":
     ifgs = data["ifg"]
     pix = data["pix"]
     sigma = data["sigma"]
+    print(f"sigma: {sigma}")
 
     npixperifg = pix.shape[1]
 
@@ -70,18 +71,22 @@ if __name__ == "__main__":
     # numerator = bincount2d(pix, bins=npix) @ ifgs  # / sigma**2,
     # # denominator = np.bincount(pix, minlength=npix)  # / sigma**2,
     # denominator = bincount2d(pix, bins=npix)  # @ (1 / sigma**2)
-    # Efficient accumulation using np.add.at
 
-    # repeat pix to match ifgs shape
-    
+    # weight = 1 / sigma[:, None] ** 2
+    # np.add.at(numerator, (pix, np.arange(g.IFG_SIZE)), ifgs * weight)
+    # np.add.at(denominator, (pix, np.arange(g.IFG_SIZE)), weight)
 
-    weight = 1 / sigma[:, None] ** 2
-    np.add.at(numerator, (pix, np.arange(g.IFG_SIZE)), ifgs * weight)
-    np.add.at(denominator, (pix, np.arange(g.IFG_SIZE)), weight)
+    numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
+    denominator = np.zeros((npix, g.IFG_SIZE), dtype=float)
+    for i in range(pix.shape[0]):
+        weight = 1 / sigma[i] ** 2
+        numerator[pix[i]] += ifgs[i] * weight
+        denominator[pix[i]] += weight
 
-    # numerator = np.histogram2d(pix, weights=ifgs, bins=npix)
-    # ifgs = ifgs.flatten()
-    # pix = pix.flatten()
+    mask = denominator == 0
+    m_ifg = np.zeros((npix, g.IFG_SIZE), dtype=float)
+    m_ifg[~mask] = numerator[~mask] / denominator[~mask]
+    m_ifg[mask] = np.nan
 
     # for i in range(g.IFG_SIZE):
     #     pix[i * len(pix) // g.IFG_SIZE : (i + 1) * len(pix) // g.IFG_SIZE] = (
@@ -98,12 +103,12 @@ if __name__ == "__main__":
     # mask = denominator == 0
     # m[~mask] = numerator[~mask] / denominator[~mask]
     # m[mask] = np.nan
-    m = numerator / denominator
+    # m = numerator / denominator
 
     # reshape m to (npix, IFG_SIZE)
     # m = m.reshape((npix, g.IFG_SIZE))
     print("Divided")
-    m = np.fft.rfft(m, axis=1)
+    m = np.fft.rfft(m_ifg, axis=1)
 
     print("Plotting maps")
 
