@@ -66,10 +66,8 @@ plt.savefig(f"../output/pix_hits/{n}.png")
 
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0])
-ifg_scanning = ifg_scanning  # + noise
+ifg_scanning = ifg_scanning + noise
 print(f"Shape of noise: {noise.shape} and shape of sigma: {sigma.shape}")
-
-sigma = np.ones(ifg_scanning.shape[0])
 
 np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")

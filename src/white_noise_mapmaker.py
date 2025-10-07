@@ -61,71 +61,45 @@ if __name__ == "__main__":
 
     numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
     denominator = np.zeros((npix, g.IFG_SIZE), dtype=float)
-
-    # # for xi in range(g.IFG_SIZE):
-    # # numerator = np.bincount(
-    # #     pix,
-    # #     weights=ifgs,  # / sigma**2,
-    # #     minlength=npix,
-    # # )
-    # numerator = bincount2d(pix, bins=npix) @ ifgs  # / sigma**2,
-    # # denominator = np.bincount(pix, minlength=npix)  # / sigma**2,
-    # denominator = bincount2d(pix, bins=npix)  # @ (1 / sigma**2)
-
-    # weight = 1 / sigma[:, None] ** 2
-    # np.add.at(numerator, (pix, np.arange(g.IFG_SIZE)), ifgs * weight)
-    # np.add.at(denominator, (pix, np.arange(g.IFG_SIZE)), weight)
-
-    numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
-    denominator = np.zeros((npix, g.IFG_SIZE), dtype=float)
     for i in range(pix.shape[0]):
         weight = 1 / sigma[i] ** 2
         numerator[pix[i]] += ifgs[i] * weight
         denominator[pix[i]] += weight
+    print(
+        f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
+    )
 
     mask = denominator == 0
     m_ifg = np.zeros((npix, g.IFG_SIZE), dtype=float)
     m_ifg[~mask] = numerator[~mask] / denominator[~mask]
     m_ifg[mask] = np.nan
-
-    # for i in range(g.IFG_SIZE):
-    #     pix[i * len(pix) // g.IFG_SIZE : (i + 1) * len(pix) // g.IFG_SIZE] = (
-    #         pix[i * len(pix) // g.IFG_SIZE : (i + 1) * len(pix) // g.IFG_SIZE] * i
-    #     )
-    # sigma = np.repeat(sigma, g.IFG_SIZE)
-    # numerator = np.bincount(pix, weights=ifgs / sigma**2, minlength=npix * g.IFG_SIZE)
-    # denominator = np.bincount(pix, weights=1 / sigma**2, minlength=npix * g.IFG_SIZE)
-
-    print(
-        f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
-    )
-    # m = np.zeros_like(numerator)
-    # mask = denominator == 0
-    # m[~mask] = numerator[~mask] / denominator[~mask]
-    # m[mask] = np.nan
-    # m = numerator / denominator
-
-    # reshape m to (npix, IFG_SIZE)
-    # m = m.reshape((npix, g.IFG_SIZE))
     print("Divided")
-    m = np.fft.rfft(m_ifg, axis=1)
+
+    m = np.abs(np.fft.rfft(m_ifg, axis=1))
+    phase = np.angle(np.fft.rfft(m_ifg, axis=1))
 
     print("Plotting maps")
 
     frequencies = utils.generate_frequencies("ll", "ss", 257)
     # save m as maps
-    for nui in range(len(frequencies)):
+    for nui, freq in enumerate(frequencies):
         if g.FITS:
             hp.write_map(
-                f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.fits",
-                np.abs(m[:, nui]),
+                f"./../output/white_noise_mapmaker/{int(freq):04d}.fits",
+                m[:, nui],
+                overwrite=True,
+                dtype=np.float64,
+            )
+            hp.write_map(
+                f"./../output/white_noise_mapmaker/phase_{int(freq):04d}.fits",
+                phase[:, nui],
                 overwrite=True,
                 dtype=np.float64,
             )
         if g.PNG:
             hp.mollview(
-                np.abs(m[:, nui]),
-                title=f"{int(frequencies[nui]):04d} GHz",
+                m[:, nui],
+                title=f"{int(freq):04d} GHz",
                 unit="MJy/sr",
                 min=0,
                 max=50,
@@ -133,7 +107,17 @@ if __name__ == "__main__":
                 coord=["E", "G"],
                 # norm="hist",
             )
-            plt.savefig(
-                f"./../output/white_noise_mapmaker/{int(frequencies[nui]):04d}.png"
+            plt.savefig(f"./../output/white_noise_mapmaker/{int(freq):04d}.png")
+            plt.close()
+            hp.mollview(
+                phase[:, nui],
+                title=f"Phase {int(freq):04d} GHz",
+                unit="radians",
+                min=-np.pi,
+                max=np.pi,
+                xsize=2000,
+                coord=["E", "G"],
+                # norm="hist",
             )
+            plt.savefig(f"./../output/white_noise_mapmaker/phase_{int(freq):04d}.png")
             plt.close()
