@@ -68,8 +68,8 @@ ifg = ifg.real
 # now we frankenstein the IFGs together
 ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE))
 for i in range(npixperifg):
-    for pixi, pix in enumerate(pix_ecl[:, i]):
-        ifg_scanning[pixi, i] = ifg[pix, i]
+    for pix_i, pix in enumerate(pix_ecl[:, i]):
+        ifg_scanning[pix_i, i] = ifg[pix, i]
 
 print(f"Shape of ifg_scanning: {ifg_scanning.shape}")
 
