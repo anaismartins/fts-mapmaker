@@ -11,17 +11,26 @@ sys.path.append(parent)
 import globals as g
 import utils
 
-data = np.load("../output/ifgs_modern.npz")
+# data = np.load("../output/ifgs_modern.npz")
+data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
 ifgs = data["ifg"]
 pix = data["pix"]
 
-# use only the middle pixel
-pix = pix[:, pix.shape[1] // 2]
+if g.SIM_TYPE == "firas":
+    ifgs = ifgs / g.N_IFGS
+
 print(f"Shape of ifgs: {ifgs.shape} and shape of pix: {pix.shape}")
 
+# use only the middle pixel
+if g.SIM_TYPE == "modern":
+    pix = pix[:, g.NPIXPERIFG // 2]
+elif g.SIM_TYPE == "firas":
+    pix = pix[g.N_IFGS // 2, :, g.NPIXPERIFG // 2]
+else:
+    raise ValueError("g.SIM_TYPE must be 'modern' or 'firas'")
+
 # plot hit map of the scanning strategy
-npix = hp.nside2npix(g.NSIDE)
-hit_map = np.bincount(pix, minlength=npix).astype(float)
+hit_map = np.bincount(pix, minlength=g.NPIX).astype(float)
 mask = hit_map == 0
 hit_map[mask] = hp.UNSEEN
 if g.PNG:
@@ -39,8 +48,8 @@ if g.PNG:
 
 frequencies = utils.generate_frequencies("ll", "ss", 257)
 
-m_ifg = np.zeros((npix, g.IFG_SIZE), dtype=float)
-data_density = np.zeros((npix), dtype=float)
+m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
+data_density = np.zeros((g.NPIX), dtype=float)
 
 for i in range(pix.shape[0]):
     m_ifg[pix[i]] += ifgs[i]
