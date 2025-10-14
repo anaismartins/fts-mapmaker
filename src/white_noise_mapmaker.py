@@ -61,10 +61,16 @@ if __name__ == "__main__":
 
     numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
     denominator = np.zeros((npix, g.IFG_SIZE), dtype=float)
-    for i in range(pix.shape[0]):
-        weight = 1 / sigma[i] ** 2
-        numerator[pix[i]] += ifgs[i] * weight
-        denominator[pix[i]] += weight
+    # Vectorized accumulation: loop over IFG sample index (usually much smaller
+    # than the number of IFGs) and use np.bincount to accumulate values per pixel.
+    # This avoids the expensive Python-level loop over all IFGs and is much faster.
+    weights = 1.0 / (sigma**2)
+    for s in range(g.IFG_SIZE):
+        pix_s = pix[:, s]
+        vals = ifgs[:, s] * weights
+        # bincount returns length npix; fill the column s for numerator/denominator
+        numerator[:, s] = np.bincount(pix_s, weights=vals, minlength=npix)
+        denominator[:, s] = np.bincount(pix_s, weights=weights, minlength=npix)
     print(
         f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
     )
