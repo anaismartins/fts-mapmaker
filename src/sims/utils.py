@@ -1,4 +1,5 @@
 import astropy.units as u
+import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
@@ -7,11 +8,42 @@ import globals as g
 import utils
 
 
+def downgrade_map(input_map, nside_out):
+    dust_map_smoothed = hp.smoothing(input_map, fwhm=7 * np.pi / 180, nest=True)
+
+    # alms = hp.map2alm(dust_map_smoothed)
+    # dust_map_downgraded = hp.alm2map(alms, nside_out) * u.uK
+    dust_map_downgraded = (
+        hp.ud_grade(
+            dust_map_smoothed, nside_out=nside_out, order_in="NESTED", order_out="RING"
+        )
+        * u.uK
+    )
+
+    dust_map_downgraded_mjy = dust_map_downgraded.to(
+        u.MJy / u.sr,
+        equivalencies=u.brightness_temperature(545 * u.GHz),
+    )
+
+    rot = hp.Rotator(coord=["G", "E"])
+    m_ecl = rot.rotate_map_pixel(dust_map_downgraded_mjy)
+
+    hp.mollview(m_ecl, title="Downgraded dust map", unit="$\\mathrm{MJy/sr}$")
+    plt.savefig("../output/dust_map_downgraded.png")
+    plt.close()
+
+    print("Downgraded map to nside ", nside_out)
+    return m_ecl
+
+
 def sim_dust():
 
-    dust_map_downgraded_mjy = fits.open("../output/dust_map_downgraded.fits")
+    dust_map_path = "../input/COM_CompMap_ThermalDust-commander_n2048_R2.00.fits"
+    dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
+
+    dust_map_downgraded_mjy = downgrade_map(dust_map, g.NSIDE)
     # get map data from the fits file
-    dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
+    # dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
 
     nu0_dust = 545 * u.GHz  # Planck 2015
     A_d = 163 * u.uK

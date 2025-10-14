@@ -37,73 +37,73 @@ mtm_length = sky_data["df_data"]["mtm_length"][:]
 ss_filter = (mtm_speed == 0) & (mtm_length == 0)
 ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
 ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
-# scan_dir = sky_data["df_data"]["scan"][ss_filter]
+scan_dir = sky_data["df_data"]["scan"][ss_filter]
 
 npixperifg = 512
 n_ifgs = 16
 
-# total_time = 55.36  # seconds
-# flyback_time = 0.42  # seconds
-# time_per_ifg = total_time / n_ifgs  # seconds
-# time_per_ifg_on_source = time_per_ifg - flyback_time  # seconds
+total_time = 55.36  # seconds
+flyback_time = 0.42  # seconds
+time_per_ifg = total_time / n_ifgs  # seconds
+time_per_ifg_on_source = time_per_ifg - flyback_time  # seconds
 
-# speed_deg_per_min = 3.5
-# speed = speed_deg_per_min / 60  # degrees per second
+speed_deg_per_min = 3.5
+speed = speed_deg_per_min / 60  # degrees per second
 
-# # Initialize array to hold ecl_lat for all IFGs
-# ecl_lats = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=float)
+# Initialize array to hold ecl_lat for all IFGs
+ecl_lats = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=float)
 
-# # Compute starting positions for each IFG
-# t1 = time.time()
-# for ifg_i in range(n_ifgs):
-#     print(f"Computing latitudes for IFG {ifg_i+1}/{n_ifgs}")
-#     # Initial position for this IFG
-#     start_offset = (speed * total_time / 2) * scan_dir
-#     flyback_offset = speed * flyback_time * scan_dir * ifg_i
-#     ecl_lat_init = (
-#         ecl_lat
-#         - start_offset
-#         + flyback_offset
-#         + speed * time_per_ifg_on_source * scan_dir * ifg_i
-#     )
+# Compute starting positions for each IFG
+t1 = time.time()
+for ifg_i in range(n_ifgs):
+    print(f"Computing latitudes for IFG {ifg_i+1}/{n_ifgs}")
+    # Initial position for this IFG
+    start_offset = (speed * total_time / 2) * scan_dir
+    flyback_offset = speed * flyback_time * scan_dir * ifg_i
+    ecl_lat_init = (
+        ecl_lat
+        - start_offset
+        + flyback_offset
+        + speed * time_per_ifg_on_source * scan_dir * ifg_i
+    )
 
-#     # Fill in pixel positions for this IFG
-#     for pix in range(npixperifg):
-#         ecl_lats[ifg_i, :, pix] = (
-#             ecl_lat_init + speed * time_per_ifg_on_source * scan_dir * pix / npixperifg
-#         )
-#         # adjust latitudes to be in the range [-90, 90]
-#         ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] = (
-#             -ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] - 180
-#         )
-#         ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90] = (
-#             180 - ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90]
-#         )
-# t2 = time.time()
-# print(f"Time taken for computing the latitudes: {t2-t1} seconds")
+    # Fill in pixel positions for this IFG
+    for pix in range(npixperifg):
+        ecl_lats[ifg_i, :, pix] = (
+            ecl_lat_init + speed * time_per_ifg_on_source * scan_dir * pix / npixperifg
+        )
+        # adjust latitudes to be in the range [-90, 90]
+        ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] = (
+            -ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] - 180
+        )
+        ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90] = (
+            180 - ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90]
+        )
+t2 = time.time()
+print(f"Time taken for computing the latitudes: {t2-t1} seconds")
 
-# t1 = time.time()
-# pix_ecl = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=int)
-# # Vectorized computation of pixel indices for all IFGs and pixels
-# for ifg_i in range(n_ifgs):
-#     print(f"Computing pixel indices for IFG {ifg_i+1}/{n_ifgs}")
-#     # ecl_lon shape: (N,), ecl_lats[ifg_i] shape: (N, npixperifg)
-#     # Broadcast ecl_lon to (N, npixperifg) for vectorized ang2pix
-#     pix_ecl[ifg_i] = hp.ang2pix(
-#         g.NSIDE,
-#         np.broadcast_to(ecl_lon[:, None], ecl_lats[ifg_i].shape),
-#         ecl_lats[ifg_i],
-#         lonlat=True,
-#     )
-# t2 = time.time()
-# print(f"Time taken for computing the pixel indices: {t2-t1} seconds")
+t1 = time.time()
+pix_ecl = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=int)
+# Vectorized computation of pixel indices for all IFGs and pixels
+for ifg_i in range(n_ifgs):
+    print(f"Computing pixel indices for IFG {ifg_i+1}/{n_ifgs}")
+    # ecl_lon shape: (N,), ecl_lats[ifg_i] shape: (N, npixperifg)
+    # Broadcast ecl_lon to (N, npixperifg) for vectorized ang2pix
+    pix_ecl[ifg_i] = hp.ang2pix(
+        g.NSIDE,
+        np.broadcast_to(ecl_lon[:, None], ecl_lats[ifg_i].shape),
+        ecl_lats[ifg_i],
+        lonlat=True,
+    )
+t2 = time.time()
+print(f"Time taken for computing the pixel indices: {t2-t1} seconds")
 
 # # save pix_ecl
 # np.save("../output/sim_firas/pix_ecl.npy", pix_ecl)
 # print("Saved pix_ecl to ../output/sim_firas/pix_ecl.npy")
 
-print(f"Loading pix_ecl from ../output/sim_firas/pix_ecl.npy")
-pix_ecl = np.load("../output/sim_firas/pix_ecl.npy")
+# print(f"Loading pix_ecl from ../output/sim_firas/pix_ecl.npy")
+# pix_ecl = np.load("../output/sim_firas/pix_ecl.npy")
 
 print("Saving hit map")
 npix = hp.nside2npix(g.NSIDE)
