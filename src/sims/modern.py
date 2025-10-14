@@ -35,8 +35,31 @@ ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
 scan = sky_data["df_data"]["scan"][ss_filter]
 
 npixperifg = 512
-pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
+pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg, modern=True)
 print(f"Shape of pix_ecl: {pix_ecl.shape} and of spec: {spec.shape}")
+
+# save map of scanning strategy
+hit_map = np.bincount(pix_ecl.flatten(), minlength=hp.nside2npix(g.NSIDE)) / npixperifg
+mask = hit_map == 0
+hit_map[mask] = np.nan
+if g.PNG:
+    hp.mollview(
+        hit_map,
+        title="Scanning Strategy Hit Map",
+        unit="Hits",
+        min=0,
+        max=np.nanmax(hit_map),
+        xsize=2000,
+        coord=["E", "G"],
+    )
+    plt.savefig("../output/hit_maps/scanning_strategy_modern.png")
+    plt.close()
+if g.FITS:
+    hp.write_map(
+        "../output/hit_maps/scanning_strategy_modern.fits",
+        hit_map,
+        overwrite=True,
+    )
 
 ifg = np.fft.irfft(spec, axis=1)
 ifg = np.roll(ifg, 360, axis=1)
@@ -61,7 +84,15 @@ plt.close()
 print(f"Pixels hit: {np.unique(pix_ecl[n])}")
 npix = hp.nside2npix(g.NSIDE)
 map_pix = np.bincount(pix_ecl[n], minlength=npix)
-hp.mollview(map_pix, coord="E", title="Pixels hit")
+hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds")
+hp.projplot(
+    ecl_lon[n],
+    ecl_lat[n],
+    coord="E",
+    color="green",  # "blue",
+    lonlat=True,
+    marker="x",
+)
 plt.savefig(f"../output/pix_hits/{n}.png")
 
 # add white noise

@@ -8,9 +8,15 @@ import numpy as np
 import globals as g
 
 
-def generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg):
+def generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg, modern):
     # times each mode takes for a full telemetered interferogram (in seconds)
-    times = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
+    times_onboard = {"ss": 3.04, "ls": 9.88, "sf": 2.04, "lf": 6.59}
+    times_telemetered = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
+
+    if modern:
+        times = times_onboard
+    else:
+        times = times_telemetered
 
     speed = 3.5  # degrees per minute
     speed = speed / 60  # degrees per second
@@ -62,15 +68,8 @@ def generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg):
             pix_ecl[:, i] = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats[:, i], lonlat=True)
     else:
         pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats, lonlat=True)
-    # pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon[:, np.newaxis], ecl_lats, lonlat=True)
     print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
-    # P = np.zeros((len(start_pix_ecl) * npixperifg), dtype=int)
-    # for i in range(npixperifg):
-    #     P[i * len(start_pix_ecl) : (i + 1) * len(start_pix_ecl)] =
-    # P[0 : len(start_pix_ecl)] = start_pix_ecl
-    # P[len(start_pix_ecl) : len(start_pix_ecl) * 2] = middle_pix_ecl
-    # P[len(start_pix_ecl) * 2 :] = end_pix_ecl
     print(f"pix_ecl inside function: {pix_ecl}")
     return pix_ecl
 
