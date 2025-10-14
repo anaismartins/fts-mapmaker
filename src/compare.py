@@ -175,7 +175,7 @@ hp.mollview(
     max=1.5,
     cmap="RdBu_r",
     coord=["E", "G"],
-    norm="hist",
+    # norm="hist",
 )
 hp.graticule()
 plt.savefig("../output/compare/ratio_maps/binned.png")
