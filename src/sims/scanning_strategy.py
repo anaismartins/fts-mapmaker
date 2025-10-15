@@ -96,98 +96,104 @@ if __name__ == "__main__":
     print(f"pix_ecl from beginning: {pix_ecl_original}")
 
     # plot original hit map
-    npix = hp.nside2npix(g.NSIDE)
-    original_hit_map = np.bincount(pix_ecl_original, minlength=npix)
+    original_hit_map = np.bincount(pix_ecl_original, minlength=g.NPIX).astype(float)
+    mask = original_hit_map == 0
+    original_hit_map[mask] = np.nan
     if g.PNG:
         hp.mollview(
             original_hit_map,
             title="Original Hit Map",
             unit="Hits",
             min=0,
-            max=original_hit_map.max(),
+            max=np.nanmax(original_hit_map),
             xsize=2000,
             coord=["E", "G"],
         )
-        plt.savefig("../output/hit_maps/original.png")
+        plt.savefig(
+            "../output/hit_maps/original.png", facecolor=None, bbox_inches="tight"
+        )
         plt.close()
     if g.FITS:
         hp.write_map(
-            "../output/hit_maps/original.fits", original_hit_map, overwrite=True
+            "../output/hit_maps/original.fits",
+            original_hit_map,
+            overwrite=True,
+            dtype=np.float64,
         )
 
-    npixperifg = 512
-    pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
-    print(f"Shape of pix_ecl: {pix_ecl.shape}")
+    # npixperifg = 512
+    # pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
+    # print(f"Shape of pix_ecl: {pix_ecl.shape}")
 
-    npix = hp.nside2npix(g.NSIDE)
+    # npix = hp.nside2npix(g.NSIDE)
 
-    # remake hit map
-    hit_map = np.bincount(pix_ecl[:, npixperifg // 2], minlength=npix)
-    # hit_map = np.bincount(pix_ecl, minlength=npix)
-    hp.mollview(
-        hit_map,
-        title="Hit Map",
-        unit="Hits",
-        min=0,
-        max=hit_map.max(),
-        xsize=2000,
-        coord=["E", "G"],
-    )
-    if g.PNG:
-        plt.savefig("../output/hit_maps/remade.png")
-        plt.close()
-    if g.FITS:
-        hp.write_map("../output/hit_maps/remade.fits", hit_map, overwrite=True)
+    # # remake hit map
+    # hit_map = np.bincount(pix_ecl[:, npixperifg // 2], minlength=npix)
+    # # hit_map = np.bincount(pix_ecl, minlength=npix)
+    # hp.mollview(
+    #     hit_map,
+    #     title="Hit Map",
+    #     unit="Hits",
+    #     min=0,
+    #     max=hit_map.max(),
+    #     xsize=2000,
+    #     coord=["E", "G"],
+    # )
+    # if g.PNG:
+    #     plt.savefig("../output/hit_maps/remade.png")
+    #     plt.close()
+    # if g.FITS:
+    #     hp.write_map("../output/hit_maps/remade.fits", hit_map, overwrite=True)
 
-    P = pix_ecl.flatten()
+    # P = pix_ecl.flatten()
 
-    # save pointing matrix
-    # np.save("../input/firas_scanning_strategy.npy", P)
-    # print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
+    # # save pointing matrix
+    # # np.save("../input/firas_scanning_strategy.npy", P)
+    # # print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
 
-    # plot hit map of the scanning strategy
-    npix = hp.nside2npix(g.NSIDE)
-    hit_map_ss = np.bincount(P, minlength=npix) / npixperifg
+    # # plot hit map of the scanning strategy
+    # npix = hp.nside2npix(g.NSIDE)
+    # hit_map_ss = np.bincount(P, minlength=npix) / npixperifg
 
-    if g.PNG:
-        hp.mollview(
-            hit_map_ss,
-            title="Scanning Strategy Hit Map",
-            unit="Hits",
-            min=0,
-            max=hit_map_ss.max(),
-            xsize=2000,
-            coord=["E", "G"],
-        )
-        plt.savefig("../output/hit_maps/scanning_strategy.png")
-        plt.close()
+    # if g.PNG:
+    #     hp.mollview(
+    #         hit_map_ss,
+    #         title="Scanning Strategy Hit Map",
+    #         unit="Hits",
+    #         min=0,
+    #         max=hit_map_ss.max(),
+    #         xsize=2000,
+    #         coord=["E", "G"],
+    #     )
+    #     plt.savefig("../output/hit_maps/scanning_strategy.png")
+    #     plt.close()
 
-    # compare hit maps
-    difference_map = original_hit_map - hit_map_ss
-    if g.PNG:
-        hp.mollview(
-            difference_map,
-            title="Original hit map - Scanning strategy hit map",
-            unit="Hits",
-            min=-1,
-            max=1,
-            cmap="RdBu_r",
-            coord=["E", "G"],
-        )
-        plt.savefig("../output/hit_maps/difference.png")
-        plt.close()
-    ratio_map = original_hit_map / hit_map_ss
-    print("Ratio between original hit map and scanning strategy hit map: ", ratio_map)
-    # plot ratio map
-    if g.PNG:
-        hp.mollview(
-            ratio_map,
-            title="Original hit map / Scanning strategy hit map",
-            unit="Hits",
-            min=0.5,
-            max=1.5,
-            cmap="RdBu_r",
-            coord=["E", "G"],
-        )
-        plt.savefig("../output/hit_maps/ratio.png")
-        plt.close()
+    # # compare hit maps
+    # difference_map = original_hit_map - hit_map_ss
+    # if g.PNG:
+    #     hp.mollview(
+    #         difference_map,
+    #         title="Original hit map - Scanning strategy hit map",
+    #         unit="Hits",
+    #         min=-1,
+    #         max=1,
+    #         cmap="RdBu_r",
+    #         coord=["E", "G"],
+    #     )
+    #     plt.savefig("../output/hit_maps/difference.png")
+    #     plt.close()
+    # ratio_map = original_hit_map / hit_map_ss
+    # print("Ratio between original hit map and scanning strategy hit map: ", ratio_map)
+    # # plot ratio map
+    # if g.PNG:
+    #     hp.mollview(
+    #         ratio_map,
+    #         title="Original hit map / Scanning strategy hit map",
+    #         unit="Hits",
+    #         min=0.5,
+    #         max=1.5,
+    #         cmap="RdBu_r",
+    #         coord=["E", "G"],
+    #     )
+    #     plt.savefig("../output/hit_maps/ratio.png")
+    #     plt.close()

@@ -56,23 +56,9 @@ spec_scanning = spec_scanning + sims.white_noise(spec_scanning.shape[0], ifg=Fal
 # bin spec_scanning into spec maps
 spec_map = np.zeros((g.NPIX, g.SPEC_SIZE))
 dd = np.zeros(g.NPIX)
-hit_map = np.zeros(g.NPIX)
 for pixi, pix in enumerate(pix_ecl):
     spec_map[pix] += spec_scanning[pixi]
     dd[pix] += 1
-    hit_map[pix] += hit_scanning[pixi]
-
-hp.mollview(
-    hit_map,
-    title="Hit map",
-    unit="Hits",
-    min=0,
-    max=np.max(hit_map),
-    xsize=2000,
-    coord=["E", "G"],
-)
-plt.savefig("../output/hit_map_scanning_strategy.png")
-plt.close()
 
 mask = dd == 0
 spec_map[~mask] = spec_map[~mask] / dd[~mask][:, np.newaxis]
