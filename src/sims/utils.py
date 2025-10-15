@@ -33,7 +33,7 @@ def downgrade_map(input_map, nside_out):
     plt.close()
 
     print("Downgraded map to nside ", nside_out)
-    return m_ecl
+    return m_ecl.value
 
 
 def sim_dust():

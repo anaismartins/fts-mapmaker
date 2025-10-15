@@ -116,12 +116,16 @@ if g.PNG:
         title="FIRAS Scanning Strategy Hit Map",
         unit="Hits per on-board IFG per pixel",
         min=0,
-        max=np.nanmax(hit_map),
+        max=332,
         xsize=2000,
         coord=["E", "G"],
     )
 
-    plt.savefig("../output/hit_maps/scanning_strategy_firas.png")
+    plt.savefig(
+        "../output/hit_maps/scanning_strategy_firas.png",
+        facecolor=None,
+        bbox_inches="tight",
+    )
     plt.close()
 if g.FITS:
     hp.write_map(

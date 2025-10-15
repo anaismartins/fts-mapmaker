@@ -45,14 +45,15 @@ hit_map[mask] = np.nan
 if g.PNG:
     hp.mollview(
         hit_map,
-        title="Scanning Strategy Hit Map",
+        title="Scanning Strategy Hit Map for a Modern Experiment",
         unit="Hits",
         min=0,
-        max=np.nanmax(hit_map),
+        # max=np.nanmax(hit_map),
+        max=332,
         xsize=2000,
         coord=["E", "G"],
     )
-    plt.savefig("../output/hit_maps/scanning_strategy_modern.png")
+    plt.savefig("../output/hit_maps/scanning_strategy_modern.png", bbox_inches="tight")
     plt.close()
 if g.FITS:
     hp.write_map(
@@ -64,6 +65,9 @@ if g.FITS:
 ifg = np.fft.irfft(spec, axis=1)
 ifg = np.roll(ifg, 360, axis=1)
 ifg = ifg.real
+
+# check if ifg has units
+print("ifg type:", type(ifg), "unit:", getattr(ifg, "unit", None))
 
 # now we frankenstein the IFGs together
 ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE))

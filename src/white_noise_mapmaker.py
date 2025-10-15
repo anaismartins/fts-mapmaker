@@ -13,70 +13,60 @@ import globals as g
 import utils
 
 if __name__ == "__main__":
-    data = np.load("../output/ifgs_modern.npz")
+    data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
     ifgs = data["ifg"]
     pix = data["pix"]
     sigma = data["sigma"]
     print(f"sigma: {sigma}")
 
-    npixperifg = pix.shape[1]
-
-    # plot ifgs
-    plt.imshow(ifgs, aspect="auto")
-    plt.colorbar(label="Interferogram")
-    plt.xlabel("IFG point")
-    plt.ylabel("IFG number")
-    plt.title("Input IFGs")
-    plt.savefig("../output/ifgs.png")
-    plt.close()
-
-    ifgs = np.roll(ifgs, -360, axis=1)
+    # # plot ifgs
+    # plt.imshow(ifgs, aspect="auto")
+    # plt.colorbar(label="Interferogram")
+    # plt.xlabel("IFG point")
+    # plt.ylabel("IFG number")
+    # plt.title("Input IFGs")
+    # plt.savefig("../output/ifgs.png")
+    # plt.close()
 
     print(
         f"Shape of ifgs: {ifgs.shape} and shape of P: {pix.shape} and shape of sigma: {sigma.shape}"
     )
 
-    npix = hp.nside2npix(g.NSIDE)
+    ifgs = np.roll(ifgs, -360, axis=1)
 
-    # hit map
-    hit_map = np.bincount(pix.flatten(), minlength=npix).astype(float)
-    mask = hit_map == 0
-    hit_map[mask] = np.nan
-    if g.PNG:
-        hp.mollview(
-            hit_map / npixperifg,
-            title="Scanning Strategy Hit Map",
-            unit="Hits",
-            min=0,
-            max=np.nanmax(hit_map / npixperifg),
-            xsize=2000,
-            coord=["E", "G"],
-        )
-        plt.savefig("../output/hit_maps/scanning_strategy.png")
-        plt.close()
-
-    # how wmany unique pixels are there?
+    # how many unique pixels are there?
     unique_pixels = np.unique(pix)
-    print(f"Number of unique pixels in P: {len(unique_pixels)} out of {npix}")
+    print(f"Number of unique pixels in P: {len(unique_pixels)} out of {g.NPIX}")
 
-    numerator = np.zeros((npix, g.IFG_SIZE), dtype=float)
-    denominator = np.zeros((npix, g.IFG_SIZE), dtype=float)
+    numerator = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
+    denominator = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
     # Vectorized accumulation: loop over IFG sample index (usually much smaller
     # than the number of IFGs) and use np.bincount to accumulate values per pixel.
     # This avoids the expensive Python-level loop over all IFGs and is much faster.
     weights = 1.0 / (sigma**2)
-    for s in range(g.IFG_SIZE):
-        pix_s = pix[:, s]
-        vals = ifgs[:, s] * weights
-        # bincount returns length npix; fill the column s for numerator/denominator
-        numerator[:, s] = np.bincount(pix_s, weights=vals, minlength=npix)
-        denominator[:, s] = np.bincount(pix_s, weights=weights, minlength=npix)
+    if g.SIM_TYPE == "modern":
+        for x_i in range(g.IFG_SIZE):
+            pix_s = pix[:, x_i]
+            vals = ifgs[:, x_i] * weights
+            # bincount returns length npix; fill the column x_i for numerator/denominator
+            numerator[:, x_i] = np.bincount(pix_s, weights=vals, minlength=g.NPIX)
+            denominator[:, x_i] = np.bincount(pix_s, weights=weights, minlength=g.NPIX)
+    elif g.SIM_TYPE == "firas":
+        for ifg_i in range(g.N_IFGS):
+            for x_i in range(g.IFG_SIZE):
+                pix_s = pix[ifg_i, :, x_i]
+                vals = ifgs[ifg_i, :, x_i] * weights[ifg_i]
+                # bincount returns length npix; fill the column x_i for numerator/denominator
+                numerator[:, x_i] += np.bincount(pix_s, weights=vals, minlength=g.NPIX)
+                denominator[:, x_i] += np.bincount(
+                    pix_s, weights=weights[ifg_i], minlength=g.NPIX
+                )
     print(
         f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
     )
 
     mask = denominator == 0
-    m_ifg = np.zeros((npix, g.IFG_SIZE), dtype=float)
+    m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
     m_ifg[~mask] = numerator[~mask] / denominator[~mask]
     m_ifg[mask] = np.nan
     print("Divided")
