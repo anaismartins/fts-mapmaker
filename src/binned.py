@@ -11,7 +11,6 @@ sys.path.append(parent)
 import globals as g
 import utils
 
-# data = np.load("../output/ifgs_modern.npz")
 data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
 ifgs = data["ifg"]
 pix = data["pix"]

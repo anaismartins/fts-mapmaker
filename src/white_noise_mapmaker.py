@@ -1,8 +1,8 @@
 """
-Conjugate gradient mapmaker that solves the equation
-    A x = b
-or more explicitely
-    (P^T M^T N^{-1} M P) m = P^T M^T N^{-1} d.
+Maximum likelihood mapmaker that solves the equation
+    (P^T M^T N^{-1} M P) m = P^T M^T N^{-1} d,
+assuming there is only white noise i.e. N is diagonal, which means the equation reduces to
+    m = sum (d / sigma ^2) / sum (1 / sigma^2).
 """
 
 import healpy as hp
@@ -32,6 +32,9 @@ if __name__ == "__main__":
         f"Shape of ifgs: {ifgs.shape} and shape of P: {pix.shape} and shape of sigma: {sigma.shape}"
     )
 
+    if g.SIM_TYPE == "firas":
+        ifgs = ifgs / g.N_IFGS
+
     ifgs = np.roll(ifgs, -360, axis=1)
 
     # how many unique pixels are there?
@@ -53,13 +56,16 @@ if __name__ == "__main__":
             denominator[:, x_i] = np.bincount(pix_s, weights=weights, minlength=g.NPIX)
     elif g.SIM_TYPE == "firas":
         for ifg_i in range(g.N_IFGS):
+            # for i in range(pix.shape[1]):
+            #     numerator[pix[ifg_i, i]] += ifgs[i] * weights[i]
+            #     denominator[pix[ifg_i, i]] += weights[i]
             for x_i in range(g.IFG_SIZE):
                 pix_s = pix[ifg_i, :, x_i]
-                vals = ifgs[ifg_i, :, x_i] * weights[ifg_i]
+                vals = ifgs[:, x_i] * weights
                 # bincount returns length npix; fill the column x_i for numerator/denominator
                 numerator[:, x_i] += np.bincount(pix_s, weights=vals, minlength=g.NPIX)
                 denominator[:, x_i] += np.bincount(
-                    pix_s, weights=weights[ifg_i], minlength=g.NPIX
+                    pix_s, weights=weights, minlength=g.NPIX
                 )
     print(
         f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
@@ -81,13 +87,13 @@ if __name__ == "__main__":
     for nui, freq in enumerate(frequencies):
         if g.FITS:
             hp.write_map(
-                f"./../output/white_noise_mapmaker/{int(freq):04d}.fits",
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.fits",
                 m[:, nui],
                 overwrite=True,
                 dtype=np.float64,
             )
             hp.write_map(
-                f"./../output/white_noise_mapmaker/phase_{int(freq):04d}.fits",
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_{int(freq):04d}.fits",
                 phase[:, nui],
                 overwrite=True,
                 dtype=np.float64,
@@ -101,9 +107,10 @@ if __name__ == "__main__":
                 max=50,
                 xsize=2000,
                 coord=["E", "G"],
-                # norm="hist",
             )
-            plt.savefig(f"./../output/white_noise_mapmaker/{int(freq):04d}.png")
+            plt.savefig(
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.png"
+            )
             plt.close()
             hp.mollview(
                 phase[:, nui],
@@ -113,7 +120,8 @@ if __name__ == "__main__":
                 max=np.pi,
                 xsize=2000,
                 coord=["E", "G"],
-                # norm="hist",
             )
-            plt.savefig(f"./../output/white_noise_mapmaker/phase_{int(freq):04d}.png")
+            plt.savefig(
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_{int(freq):04d}.png"
+            )
             plt.close()

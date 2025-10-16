@@ -61,7 +61,7 @@ def A_dot_x(x, pointing, sigma):
     return A_x
 
 
-def calculate_b():
+def calculate_b(d, pointing, sigma):
     """
     Calculate the vector b = P^T N^{-1} d.
 
@@ -79,6 +79,18 @@ def calculate_b():
     np.ndarray
         The vector b.
     """
+
+    Fd = np.fft.fft(d, axis=1)
+
+    N_inv_d = Fd / (sigma[:, np.newaxis])
+
+    FN_inv_d = np.fft.ifft(N_inv_d, axis=1)
+
+    b = np.zeros((g.NPIX), dtype=complex)
+    for pix_i in range(pointing.shape[0]):
+        b[pointing[pix_i]] += FN_inv_d[pix_i]
+
+    return b
 
 
 if __name__ == "__main__":
