@@ -146,7 +146,7 @@ def solve_frequency(freq_i, ifg_data, pix_data, sigma):
     t1 = time.time()
 
     b = calculate_b(ifg_data, pix_data, sigma)
-    x_freq = conjugate_gradient(pix_data, sigma, b, tol=1e-8, freq_i=freq_i)
+    x_freq = conjugate_gradient(pix_data, sigma, b, tol=1e-4, freq_i=freq_i)
 
     t2 = time.time()
     print(f"{(freq_i+1):03d}/{ifgs.shape[1]}: Finished in {int((t2 - t1))} seconds.")
@@ -173,38 +173,40 @@ if __name__ == "__main__":
     ifgs = np.roll(ifgs, -360, axis=1)
 
     x = np.zeros((g.NPIX, g.IFG_SIZE), dtype=complex)
-    # for freq_i in range(ifgs.shape[1]):
-    #     t1 = time.time()
-    #     print(f"Solving for frequency index {freq_i+1}/{ifgs.shape[1]}")
-    #     b = calculate_b(ifgs[:, freq_i], pix[:, freq_i], sigma)
-    #     x[:, freq_i] = conjugate_gradient(pix[:, freq_i], sigma, b, tol=1e-4)
+    for freq_i in range(ifgs.shape[1]):
+        t11 = time.time()
+        print(f"Solving for frequency index {freq_i+1}/{ifgs.shape[1]}")
+        b = calculate_b(ifgs[:, freq_i], pix[:, freq_i], sigma)
+        x[:, freq_i] = conjugate_gradient(
+            pix[:, freq_i], sigma, b, tol=1e-4, freq_i=freq_i
+        )
 
-    #     # Ma = linalg.LinearOperator(
-    #     #     (g.NPIX, g.NPIX),
-    #     #     matvec=lambda x: A_dot_x(x, pix[:, freq_i], sigma),
-    #     # )
-    #     # x[:, freq_i], info = linalg.cg(Ma, b)
-    #     # if info != 0:
-    #     #     print(f"Conjugate gradient did not converge.")
+        # Ma = linalg.LinearOperator(
+        #     (g.NPIX, g.NPIX),
+        #     matvec=lambda x: A_dot_x(x, pix[:, freq_i], sigma),
+        # )
+        # x[:, freq_i], info = linalg.cg(Ma, b)
+        # if info != 0:
+        #     print(f"Conjugate gradient did not converge.")
 
-    #     t2 = time.time()
-    #     print(
-    #         f"Time taken for frequency index {freq_i+1}: {int((t2 - t1))} seconds. Estimated time left: {(t2 - t1) * (ifgs.shape[1] - freq_i - 1)/60:.2f} minutes."
-    #     )
+        t21 = time.time()
+        print(
+            f"Time taken for frequency index {freq_i+1}: {int((t21 - t11))} seconds. Estimated time left: {(t21 - t11) * (ifgs.shape[1] - freq_i - 1)/60:.2f} minutes."
+        )
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
-        futures = {
-            executor.submit(
-                solve_frequency, freq_i, ifgs[:, freq_i], pix[:, freq_i], sigma
-            ): freq_i
-            for freq_i in range(ifgs.shape[1])
-        }
+    # with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    #     # Submit all tasks
+    #     futures = {
+    #         executor.submit(
+    #             solve_frequency, freq_i, ifgs[:, freq_i], pix[:, freq_i], sigma
+    #         ): freq_i
+    #         for freq_i in range(ifgs.shape[1])
+    #     }
 
-        # Collect results as they complete
-        for future in as_completed(futures):
-            freq_i, x_freq = future.result()
-            x[:, freq_i] = x_freq
+    #     # Collect results as they complete
+    #     for future in as_completed(futures):
+    #         freq_i, x_freq = future.result()
+    #         x[:, freq_i] = x_freq
 
     m = np.abs(np.fft.rfft(x, axis=1))
     t2 = time.time()
@@ -213,12 +215,8 @@ if __name__ == "__main__":
 
     frequencies = utils.generate_frequencies("ll", "ss", 257)
     t1 = time.time()
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        for nui, freq in enumerate(frequencies):
-            futures.append(executor.submit(utils.save_maps, freq, m[:, nui]))
-        # Ensure all are completed
-        for future in as_completed(futures):
-            future.result()
+    # Save maps serially to avoid threading issues with matplotlib/Qt
+    for nui, freq in enumerate(frequencies):
+        utils.save_maps(freq, m[:, nui])
     t2 = time.time()
     print(f"Finished saving maps in {int((t2 - t1))} seconds.")

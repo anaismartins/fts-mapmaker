@@ -108,6 +108,77 @@ hp.graticule()
 plt.savefig(f"../output/compare/ratio_maps/{g.SIM_TYPE}/white_noise.png")
 plt.close()
 
+cg_mapmaker = hp.read_map(f"../output/cg_mapmaker/{g.SIM_TYPE}/0544.fits")
+cg_mapmaker[cg_mapmaker == 0] = np.nan
+hp.mollview(
+    cg_mapmaker,
+    title=f"CG mapmaker ({g.SIM_TYPE})",
+    unit="MJy/sr",
+    min=0,
+    max=50,
+    coord=["E", "G"],
+)
+hp.graticule()
+plt.savefig(f"../output/compare/cg_mapmaker_{g.SIM_TYPE}.png")
+plt.close()
+difference_map = simulated_map - cg_mapmaker
+hp.mollview(
+    difference_map,
+    title=f"Simulated - CG mapmaker ({g.SIM_TYPE})",
+    unit="MJy/sr",
+    min=-1,
+    max=1,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+hp.graticule()
+plt.savefig(f"../output/compare/difference_maps/{g.SIM_TYPE}/cg.png")
+plt.close()
+ratio_map = simulated_map / cg_mapmaker
+print("Ratio between simulated map and cg mapmaker: ", ratio_map)
+# plot ratio map
+hp.mollview(
+    ratio_map,
+    title=f"Simulated / CG mapmaker ({g.SIM_TYPE})",
+    unit="MJy/sr",
+    min=0.5,
+    max=1.5,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+hp.graticule()
+plt.savefig(f"../output/compare/ratio_maps/{g.SIM_TYPE}/cg.png")
+plt.close()
+
+# compare white noise mapmaker to cg mapmaker
+difference_map = white_noise_map - cg_mapmaker
+hp.mollview(
+    difference_map,
+    title=f"White noise - CG mapmaker ({g.SIM_TYPE})",
+    unit="MJy/sr",
+    min=-1,
+    max=1,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+hp.graticule()
+plt.savefig(f"../output/compare/difference_maps/{g.SIM_TYPE}/white_noise_cg.png")
+plt.close()
+ratio_map = white_noise_map / cg_mapmaker
+print("Ratio between white noise mapmaker and cg mapmaker: ", ratio_map)
+# plot ratio map
+hp.mollview(
+    ratio_map,
+    title=f"White noise / CG mapmaker ({g.SIM_TYPE})",
+    unit="MJy/sr",
+    min=0.5,
+    max=1.5,
+    cmap="RdBu_r",
+    coord=["E", "G"],
+)
+hp.graticule()
+plt.savefig(f"../output/compare/ratio_maps/{g.SIM_TYPE}/white_noise_cg.png")
+plt.close()
 
 # do the same but for all frequencies
 # frequencies = utils.generate_frequencies("ll", "ss", 257)
