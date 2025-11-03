@@ -68,7 +68,7 @@ print("Finished generating map cube, saving to disk...")
 for nui in range(len(frequencies)):
     if g.FITS:
         hp.write_map(
-            f"../output/binned_mapmaker/{int(frequencies[nui]):04d}.fits",
+            f"../output/binned_mapmaker/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.fits",
             m_abs[:, nui],
             overwrite=True,
             dtype=np.float64,
@@ -83,6 +83,8 @@ for nui in range(len(frequencies)):
             xsize=2000,
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/binned_mapmaker/{int(frequencies[nui]):04d}.png")
+        plt.savefig(
+            f"../output/binned_mapmaker/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.png"
+        )
         plt.close()
         plt.clf()
