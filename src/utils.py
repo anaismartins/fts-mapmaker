@@ -4,6 +4,8 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
+import globals as g
+
 channels = {"rh": 0, "rl": 1, "lh": 2, "ll": 3}
 
 
@@ -109,15 +111,23 @@ def generate_frequencies(channel, mode, nfreq=None):
     return f_ghz
 
 
-def save_mollview(m, f_ghz, save_path, max_amp=50, norm="linear"):
-    for freqi, frequency in enumerate(f_ghz):
-        hp.mollview(
-            m[:, freqi],
-            title=f"{int(frequency):04d} GHz",
-            min=1,
-            max=max_amp,
-            unit="MJy/sr",
-            norm=norm,
+def save_maps(freq, m):
+    if g.FITS:
+        hp.write_map(
+            f"./../output/cg_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.fits",
+            m,
+            overwrite=True,
+            dtype=np.float64,
         )
-        plt.savefig(f"{save_path}{int(frequency):04d}.png")
+    if g.PNG:
+        hp.mollview(
+            m,
+            title=f"{int(freq):04d} GHz",
+            unit="MJy/sr",
+            min=0,
+            max=50,
+            xsize=2000,
+            coord=["E", "G"],
+        )
+        plt.savefig(f"../output/cg_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.png")
         plt.close()
