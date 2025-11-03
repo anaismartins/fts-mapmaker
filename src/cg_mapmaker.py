@@ -41,7 +41,7 @@ def A_dot_x(x, pointing, sigma):
         Px[pix_i] = x[pix]
 
     FPx = np.fft.fft(Px)
-    N_inv_Px = FPx / sigma
+    N_inv_Px = FPx / sigma**2
 
     FN_inv_Px = np.fft.ifft(N_inv_Px)
 
@@ -65,7 +65,7 @@ def calculate_b(d, pointing, sigma):
 
     Fd = np.fft.fft(d)
 
-    N_inv_d = Fd / sigma
+    N_inv_d = Fd / sigma**2
 
     FN_inv_d = np.fft.ifft(N_inv_d)
 
