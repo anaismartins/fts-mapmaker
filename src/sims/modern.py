@@ -103,13 +103,7 @@ plt.savefig(f"../output/pix_hits/{n}.png")
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0])
 
-if g.NOISE == "only white":
-    ifg_scanning = ifg_scanning + noise
-elif g.NOISE == "1f":
-    freqs = np.fft.rfftfreq(ifg_scanning.shape[1], d=1 / (2 * g.F_NYQ))
-    noise = sims.noise_1f(sigma, freqs, )
-else:
-    raise ValueError(f"Unknown noise type: {g.NOISE}")
+ifg_scanning = ifg_scanning + noise
 print(f"Shape of noise: {noise.shape} and shape of sigma: {sigma.shape}")
 
 np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)

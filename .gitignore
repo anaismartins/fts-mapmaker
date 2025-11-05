@@ -207,6 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 # specific to the project
-output/*
 !.gitkeep
 *.fits
+*.png
+*.gif
+*.npy

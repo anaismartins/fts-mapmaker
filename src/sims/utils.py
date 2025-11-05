@@ -96,10 +96,3 @@ def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
     # np.savez("../output/white_noise.npz", noise=sigmarand)
 
     return noise, sigmarand
-
-def noise_1f(sigma, frequencies, knee_frequency, alpha):
-    """
-    Generates 1/f (and white) noise.
-    """
-
-    psd = sigma ** 2 * (1 + (np.abs(frequencies) / knee_frequency) ** alpha)
