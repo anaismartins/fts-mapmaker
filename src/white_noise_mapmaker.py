@@ -72,6 +72,23 @@ if __name__ == "__main__":
     )
 
     mask = denominator == 0
+
+    hp.mollview(
+        numerator[:, 100],
+        title="Numerator at frequency index 100",
+        coord=["E", "G"],
+        min=0,
+        max=200,
+    )
+    plt.show()
+    hp.mollview(
+        denominator[:, 100],
+        title="Denominator at frequency index 100",
+        coord=["E", "G"],
+        min=0,
+        max=200,
+    )
+    plt.show()
     m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
     m_ifg[~mask] = numerator[~mask] / denominator[~mask]
     m_ifg[mask] = np.nan

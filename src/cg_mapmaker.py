@@ -41,7 +41,7 @@ def A_dot_x(x, pointing, sigma):
         Px[pix_i] = x[pix]
 
     FPx = np.fft.fft(Px)
-    N_inv_Px = FPx / sigma**2
+    N_inv_Px = FPx / sigma  # **2
 
     FN_inv_Px = np.fft.ifft(N_inv_Px)
 
@@ -65,7 +65,7 @@ def calculate_b(d, pointing, sigma):
 
     Fd = np.fft.fft(d)
 
-    N_inv_d = Fd / sigma**2
+    N_inv_d = Fd / sigma  # **2
 
     FN_inv_d = np.fft.ifft(N_inv_d)
 
@@ -146,7 +146,7 @@ def solve_frequency(freq_i, ifg_data, pix_data, sigma):
     t1 = time.time()
 
     b = calculate_b(ifg_data, pix_data, sigma)
-    x_freq = conjugate_gradient(pix_data, sigma, b, tol=1e-8, freq_i=freq_i)
+    x_freq = conjugate_gradient(pix_data, sigma, b, tol=1e-6, freq_i=freq_i)
 
     t2 = time.time()
     print(f"{(freq_i+1):03d}/{ifgs.shape[1]}: Finished in {int((t2 - t1))} seconds.")
