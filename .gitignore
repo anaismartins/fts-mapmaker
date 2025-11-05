@@ -212,3 +212,4 @@ __marimo__/
 *.png
 *.gif
 *.npy
+*.npz
