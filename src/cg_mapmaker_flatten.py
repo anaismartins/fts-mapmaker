@@ -132,7 +132,7 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
 
 
     for i in range(maxiter):
-        print(f"CG iteration {i+1}/{maxiter}")
+        print(f"CG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
         q = A_dot_x(d, pointing, sigma)
 
         alpha = delta_new / np.dot(d.T, q)
@@ -156,6 +156,8 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
         y = x.reshape((g.NPIX, g.IFG_SIZE))
         m = np.abs(np.fft.rfft(y, axis=1))
 
+        r2 = r.reshape((g.NPIX, g.IFG_SIZE))
+
         hp.mollview(
             m[:, 100],
             title="CG map at frequency index 100",
@@ -165,6 +167,21 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             coord=["E", "G"],
         )
         plt.savefig(f'../output/cg_iter_{i:04}.png')
+
+        hp.mollview(
+            y[:, 100],
+            title="IFG map at distance index 100",
+            unit="Amplitude",
+            coord=["E", "G"],
+        )
+        plt.savefig(f'../output/cg_ifg_iter_{i:04}.png')
+        hp.mollview(
+            r2[:, 100],
+            title="IFG map at distance index 100",
+            unit="Amplitude",
+            coord=["E", "G"],
+        )
+        plt.savefig(f'../output/cg_res_ifg_iter_{i:04}.png')
         plt.close()
 
     return x
@@ -238,15 +255,15 @@ if __name__ == "__main__":
     # debug
     b_map = b.reshape((g.NPIX, g.IFG_SIZE))
     b_map = np.abs(np.fft.rfft(b_map, axis=1))
-    hp.mollview(
-        b_map[:, 100],
-        title="b map at frequency index 100",
-        unit="Amplitude",
-        min=0,
-        max=200,
-        coord=["E", "G"],
-    )
-    plt.show()
+    # hp.mollview(
+    #     b_map[:, 100],
+    #     title="b map at frequency index 100",
+    #     unit="Amplitude",
+    #     min=0,
+    #     max=200,
+    #     coord=["E", "G"],
+    # )
+    # plt.show()
     # plt.savefig("../output/b_map_debug.png")
     # plt.close()
 
