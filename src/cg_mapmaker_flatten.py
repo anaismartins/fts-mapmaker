@@ -130,6 +130,7 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
     delta_new = np.dot(r.T, r)
     delta0 = delta_new
 
+
     for i in range(maxiter):
         print(f"CG iteration {i+1}/{maxiter}")
         q = A_dot_x(d, pointing, sigma)
@@ -151,6 +152,20 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
 
         if delta_new < tol**2 * delta0:
             break
+
+        y = x.reshape((g.NPIX, g.IFG_SIZE))
+        m = np.abs(np.fft.rfft(y, axis=1))
+
+        hp.mollview(
+            m[:, 100],
+            title="CG map at frequency index 100",
+            unit="Amplitude",
+            min=0,
+            max=20,
+            coord=["E", "G"],
+        )
+        plt.savefig(f'../output/cg_iter_{i:04}.png')
+        plt.close()
 
     return x
 
