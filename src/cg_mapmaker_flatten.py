@@ -7,7 +7,6 @@ or in more simple terms we solve
 
 import multiprocessing
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import healpy as hp
 import matplotlib.pyplot as plt
@@ -27,13 +26,13 @@ def calculate_b(d, pointing, sigma):
         The vector b.
     """
 
-    Fd = np.fft.rfft(d, axis=1).flatten()
+    # Fd = np.fft.rfft(d, axis=1).flatten()
 
-    N_inv_d = (Fd / sigma**2).reshape((d.shape[0], g.SPEC_SIZE))
+    # N_inv_d = (Fd / sigma**2).reshape((d.shape[0], g.SPEC_SIZE))
 
-    FN_inv_d = np.fft.irfft(N_inv_d, axis=1).flatten()
+    # FN_inv_d = np.fft.irfft(N_inv_d, axis=1).flatten()
 
-    # N_inv_d = d / sigma**2
+    N_inv_d = d.flatten() / sigma**2
     # N_inv_d = np.fft.fft(d) / sigma**2
 
     # N_inv_d = np.fft.ifft(N_inv_d)
@@ -47,7 +46,7 @@ def calculate_b(d, pointing, sigma):
     )
     for pix_i in range(d.shape[0]):
         for x_i in range(d.shape[1]):
-            b[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += FN_inv_d[
+            b[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += N_inv_d[
                 pix_i * g.IFG_SIZE + x_i
             ]
 
