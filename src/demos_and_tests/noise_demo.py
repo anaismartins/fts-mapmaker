@@ -1,5 +1,8 @@
-import numpy as np
+import matplotlib
+
+matplotlib.use("TkAgg")  # Use Tk backend instead of default (avoids OpenGL issues)
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def noise_psd(frequencies, noise_level, knee_frequency, alpha):
@@ -15,47 +18,60 @@ def noise_psd(frequencies, noise_level, knee_frequency, alpha):
     Returns:
     np.ndarray: The calculated PSD values.
     """
-    psd = noise_level**2 * (1 + (frequencies / knee_frequency) ** alpha)
+    psd = noise_level**2 * (1 + (np.abs(frequencies) / knee_frequency) ** alpha)
     return psd
 
 
-# Data
-N = 10_00
-dt = 0.02  # time step in seconds
-data = np.random.normal(0, 1, size=N)
+np.random.seed(123)
 
-alpha = -1.04
-knee_frequency = 0.1  # Hz
+# Data parameters
+N = 10_000  # Number of samples
+dt = 0.02  # time step in seconds
+alpha = -1.04  # spectral index
+knee_frequency = 8  # Hz
 sigma_wn = 1
 
-psd_wn = np.abs(np.fft.rfft(data)) ** 2 / (N / 2 + 1)
-print(np.median(psd_wn), N, dt)
 frequencies = np.fft.rfftfreq(N, dt)
 
-
 # Noise model
-psd_values = noise_psd(
+psd_model = noise_psd(
     frequencies,
     noise_level=sigma_wn,
     knee_frequency=knee_frequency,
     alpha=alpha,
 )
+# Setting first mode of model to 1 to inherit white noise mean level
+psd_model[0] = 1
 
 
-model_real = np.fft.irfft(np.sqrt(psd_values), n=N)
+# Sampling white noise in real space
+n_wn = np.random.normal(5, 14, size=N)
 
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.loglog(frequencies, psd_wn, label="White Noise PSD", color="blue")
-ax.loglog(frequencies, psd_values, label="Colored Noise PSD", color="red")
-ax.axhline(
-    np.median(psd_wn), color="magenta", linestyle="--", label="White Noise Level"
+fft_wn = np.fft.rfft(n_wn)
+
+# Convolving white noise with the noise model in Fourier space
+n_corr = np.fft.irfft(np.sqrt(psd_model) * fft_wn)
+
+# fig, ax = plt.subplots(figsize=(10, 6))
+plt.plot(
+    np.arange(N) * dt,
+    n_wn,
+    label="White noise",
+    color="k",
+    alpha=0.5,
 )
-ax.set_xlabel("Frequency (Hz)")
-ax.set_ylabel("Power Spectral Density")
-ax.legend()
 
+plt.plot(
+    np.arange(N) * dt,
+    n_corr,
+    label="Correlated noise",
+    color="r",
+    alpha=0.5,
+)
 
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(data)
-ax.plot(model_real)
+plt.legend()
+plt.xlabel("Time (s)")
+plt.ylabel("Noise amplitude")
+plt.title("Noise Comparison")
+
 plt.show()
