@@ -79,15 +79,16 @@ def A_dot_x(x, pointing, sigma):
         for x_i in range(g.IFG_SIZE):
             Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE + x_i], x_i]
 
-    FPx = np.fft.rfft(Px, axis=1).flatten()
-    N_inv_Px = (FPx / sigma**2).reshape((Px.shape[0], g.SPEC_SIZE))
+    # FPx = np.fft.rfft(Px, axis=1).flatten()
+    # N_inv_Px = (FPx / sigma**2).reshape((Px.shape[0], g.SPEC_SIZE))
+    N_inv_Px = Px.flatten() / sigma**2
 
-    FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
+    # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
     A_x = np.zeros((g.NPIX, g.IFG_SIZE), dtype=complex)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE):
         for x_i in range(g.IFG_SIZE):
-            A_x[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += FN_inv_Px[
+            A_x[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += N_inv_Px[
                 pix_i * g.IFG_SIZE + x_i
             ]
 
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     print(f"shape of pix after flatten: {pix.shape}")
 
     print(f"shape of sigma before flatten: {sigma.shape}")
-    sigma = (sigma[:, np.newaxis] * np.ones(g.SPEC_SIZE)).flatten()
+    sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE)).flatten()
     print(f"shape of sigma after flatten: {sigma.shape}")
 
     plt.vlines(
