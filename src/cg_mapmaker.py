@@ -204,7 +204,7 @@ def preconditioned_conjugate_gradient(
     delta0 = delta_new
 
     for i in range(maxiter):
-        print(f"PCG iteration {i+1}/{maxiter}")
+        print(f"PCG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
         q = A_dot_x(d, pointing, sigma)
 
         alpha = delta_new / np.dot(d.T, q)
