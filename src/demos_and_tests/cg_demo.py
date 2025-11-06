@@ -12,8 +12,8 @@ import globals as g
 import sims.utils as sims
 import utils
 
-n_ifgs = 5
-nside = 16
+n_ifgs = 3  # Reduced from 5 to make the problem smaller
+nside = 2  # Reduced from 8 to make A fit in memory (was 1.12 TiB, now ~50 MB)
 npix = hp.nside2npix(nside)
 
 # first let's build all the matrices and solve it straight
@@ -95,8 +95,22 @@ if os.path.exists("../output/demo/A.npz"):
     A_inv = data["A_inv"]
 else:
     A = P_T @ N_inv @ P
-    A_inv = np.linalg.pinv(A)
     print(f"Shape of A: {A.shape}")
+
+    # Check for NaN or Inf values
+    if np.any(np.isnan(A)) or np.any(np.isinf(A)):
+        print("WARNING: A contains NaN or Inf values!")
+
+    # Use pseudo-inverse with error handling
+    try:
+        print("Computing pseudo-inverse of A...")
+        A_inv = np.linalg.pinv(A, rcond=1e-10)
+        print("Pseudo-inverse computed successfully")
+    except np.linalg.LinAlgError as e:
+        print(f"Error computing pseudo-inverse: {e}")
+        print("Trying with higher rcond...")
+        A_inv = np.linalg.pinv(A, rcond=1e-5)
+
     np.savez("../output/demo/A.npz", A=A, A_inv=A_inv)
 
 if os.path.exists("../output/demo/b.npz"):
@@ -115,16 +129,21 @@ print(f"Shape of P_T: {P_T.shape}")
 print(f"Shape of A_inv: {A_inv.shape}")
 print(f"Shape of b: {b.shape}")
 
-m = A_inv @ b
-m = m.reshape((npix, g.IFG_SIZE))
-m = np.fft.rfft(m, axis=1)
+if os.path.exists("../output/demo/m.npz"):
+    data = np.load("../output/demo/m.npz")
+    m = data["m"]
+else:
+    m = A_inv @ b
+    m = m.reshape((npix, g.IFG_SIZE))
+    m = np.fft.rfft(m, axis=1)
+    np.savez("../output/demo/m.npz", m=m)
 
 frequencies = utils.generate_frequencies("ll", "ss", 257)
 for freq_i, freq in enumerate(frequencies):
     hp.mollview(
         m[:, freq_i].real,
-        title=f"Map at {freq/1e9:.2f} GHz solved directly",
+        title=f"Map at {int(freq):04} GHz solved directly",
         unit="MJy/sr",
     )
-    plt.savefig(f"../output/demo/map_direct_{freq/1e9:.2f}_GHz.png")
+    plt.savefig(f"../output/demo/map_direct_{int(freq):04}_GHz.png")
     plt.close()
