@@ -10,7 +10,7 @@ from astropy.io import fits
 
 import globals as g
 
-dust_map_path = "../input/COM_CompMap_ThermalDust-commander_n2048_R2.00.fits"
+dust_map_path = "../input/COM_CompMap_ThermalDust-commander_2048_R2.00.fits"
 
 dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
 

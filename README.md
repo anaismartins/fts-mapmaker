@@ -8,7 +8,7 @@ If you are running on a FIRAS-like experiment, then your beam is much larger tha
 
 ```
 cd src
-python -m sims.downgrade_planck_map.py
+python -m sims.downgrade_planck_map
 ```
 
 Once this is done, we want to get the maps for each observed frequency, which we can do by multiplying our dust map by the dust SED at the relevant frequencies. Then, we need to Fourier transform the map data into interferograms, which are the data format output by an FTS. We can generate these by running, for example, a "modern experiment":

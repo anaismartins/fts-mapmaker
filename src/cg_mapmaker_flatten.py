@@ -155,6 +155,47 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
     return x
 
 
+def preconditioned_conjugate_gradient(
+    b, pointing, sigma, hits_map, x=None, maxiter=1000, tol=1e-10
+):
+    if x is None:
+        x = np.zeros_like(b)
+
+    Ax = A_dot_x(x, pointing, sigma)
+    r = b - Ax
+
+    # d = M_inv @ r
+    d = np.zeros_like(r)
+    d[hits_map != 0] = r[hits_map != 0] / hits_map[hits_map != 0]
+    delta_new = np.dot(r.T, d)
+    delta0 = delta_new
+
+    for i in range(maxiter):
+        print(f"PCG iteration {i+1}/{maxiter}")
+        q = A_dot_x(d, pointing, sigma)
+
+        alpha = delta_new / np.dot(d.T, q)
+
+        x += alpha * d
+
+        if i % 50 == 0:
+            r = b - A_dot_x(x, pointing, sigma)
+        else:
+            r -= alpha * q
+
+        # s = M_inv @ r
+        s = np.zeros_like(r)
+        s[hits_map != 0] = r[hits_map != 0] / hits_map[hits_map != 0]
+        delta_old = delta_new
+        delta_new = np.dot(r.T, s)
+
+        beta = delta_new / delta_old
+        d = s + beta * d
+
+        if delta_new < tol**2 * delta0:
+            break
+
+
 # def solve_frequency(freq_i, ifg_data, pix_data, sigma):
 #     """Solve for a single frequency index."""
 #     print(f"{(freq_i+1):03d}/{ifgs.shape[1]}: Started.")
@@ -237,15 +278,14 @@ if __name__ == "__main__":
 
     print(f"Starting conjugate gradient solver...")
 
-    x = conjugate_gradient(pix, sigma, b, tol=1e-6)
-
-    # Ma = linalg.LinearOperator(
-    #     (g.NPIX, g.NPIX),
-    #     matvec=lambda x: A_dot_x(x, pix[:, freq_i], sigma),
-    # )
-    # x[:, freq_i], info = linalg.cg(Ma, b)
-    # if info != 0:
-    #     print(f"Conjugate gradient did not converge.")
+    # set M to be the hits map
+    hits_map = np.zeros((g.NPIX, g.IFG_SIZE))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE):
+        for x_i in range(g.IFG_SIZE):
+            hits_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += 1
+    # M_inv = np.diag(1 / hits_map.flatten())
+    hits_map = hits_map.flatten()
+    x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
 
     x = x.reshape((g.NPIX, g.IFG_SIZE))
     m = np.abs(np.fft.rfft(x, axis=1))
