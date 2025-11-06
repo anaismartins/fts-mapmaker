@@ -21,8 +21,7 @@ sed = np.nan_to_num(sed)
 spec = dust_map_downgraded_mjy[:, np.newaxis] * sed[np.newaxis, :]
 
 user = os.environ["USER"]
-# TODO: update for new data
-data_path = f"/mn/stornext/u3/{user}/d5/firas-reanalysis/Commander/commander3/todscripts/firas/data/sky_v4.4.h5"
+data_path = f"../input/sky_v4.4.h5"
 sky_data = h5py.File(
     data_path,
     "r",
