@@ -53,7 +53,7 @@ def calculate_b(d, pointing, sigma):
     return b.flatten()
 
 
-def A_dot_x(x, pointing, sigma):
+def A_dot_x(x, pointing, sigma, npix=g.NPIX):
     """
     Calculate the matrix-vector product A x = P^T N^{-1} P x.
 
@@ -72,7 +72,7 @@ def A_dot_x(x, pointing, sigma):
         The result of the matrix-vector product A x.
     """
 
-    x = x.reshape((g.NPIX, g.IFG_SIZE))
+    x = x.reshape((npix, g.IFG_SIZE))
 
     Px = np.zeros((pointing.shape[0] // g.IFG_SIZE, g.IFG_SIZE), dtype=complex)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE):
@@ -85,7 +85,7 @@ def A_dot_x(x, pointing, sigma):
 
     # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
-    A_x = np.zeros((g.NPIX, g.IFG_SIZE), dtype=complex)
+    A_x = np.zeros((npix, g.IFG_SIZE), dtype=complex)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE):
         for x_i in range(g.IFG_SIZE):
             A_x[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += N_inv_Px[
@@ -95,7 +95,9 @@ def A_dot_x(x, pointing, sigma):
     return A_x.flatten()
 
 
-def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
+def conjugate_gradient(
+    pointing, sigma, b, x=None, maxiter=1000, tol=1e-10, npix=g.NPIX
+):
     """
     Solve the equation A x = b using the conjugate gradient method. Taken from the Painless Conjugate Gradient paper.
 
@@ -122,7 +124,7 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
     if x is None:
         x = np.zeros_like(b)
 
-    Ax = A_dot_x(x, pointing, sigma)
+    Ax = A_dot_x(x, pointing, sigma, npix=npix)
     r = b - Ax
 
     d = r
@@ -131,15 +133,18 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
     delta0 = delta_new
 
     for i in range(maxiter):
+        # check what is causing the nans in eps
+        print("debug:", delta_new, delta0, delta_new / delta0)
+
         print(f"CG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
-        q = A_dot_x(d, pointing, sigma)
+        q = A_dot_x(d, pointing, sigma, npix=npix)
 
         alpha = delta_new / np.dot(d.T, q)
 
         x += alpha * d
 
         if i % 50 == 0:
-            r = b - A_dot_x(x, pointing, sigma)
+            r = b - A_dot_x(x, pointing, sigma, npix=npix)
         else:
             r -= alpha * q
 
@@ -165,7 +170,7 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             max=20,
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_iter_{i:04}.png")
+        plt.savefig(f"../output/cg/map/iter_{i:04}.png")
         plt.close()
 
         hp.mollview(
@@ -174,7 +179,7 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_ifg_iter_{i:04}.png")
+        plt.savefig(f"../output/cg/ifg/iter_{i:04}.png")
         plt.close()
         hp.mollview(
             r2[:, 100],
@@ -182,19 +187,27 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_res_ifg_iter_{i:04}.png")
+        plt.savefig(f"../output/cg/res_ifg/iter_{i:04}.png")
         plt.close()
 
     return x
 
 
 def preconditioned_conjugate_gradient(
-    b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10
+    b,
+    pointing,
+    sigma,
+    precond,
+    x=None,
+    maxiter=1000,
+    tol=1e-10,
+    npix=g.NPIX,
+    save_path=None,
 ):
     if x is None:
         x = np.zeros_like(b)
 
-    Ax = A_dot_x(x, pointing, sigma)
+    Ax = A_dot_x(x, pointing, sigma, npix=npix)
     r = b - Ax
 
     # d = M_inv @ r
@@ -205,14 +218,14 @@ def preconditioned_conjugate_gradient(
 
     for i in range(maxiter):
         print(f"PCG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
-        q = A_dot_x(d, pointing, sigma)
+        q = A_dot_x(d, pointing, sigma, npix=npix)
 
         alpha = delta_new / np.dot(d.T, q)
 
         x += alpha * d
 
         if i % 50 == 0:
-            r = b - A_dot_x(x, pointing, sigma)
+            r = b - A_dot_x(x, pointing, sigma, npix=npix)
         else:
             r -= alpha * q
 
@@ -228,10 +241,10 @@ def preconditioned_conjugate_gradient(
         if delta_new < tol**2 * delta0:
             break
 
-        y = x.reshape((g.NPIX, g.IFG_SIZE))
+        y = x.reshape((npix, g.IFG_SIZE))
         m = np.abs(np.fft.rfft(y, axis=1))
 
-        r2 = r.reshape((g.NPIX, g.IFG_SIZE))
+        r2 = r.reshape((npix, g.IFG_SIZE))
 
         hp.mollview(
             m[:, 100],
@@ -241,7 +254,7 @@ def preconditioned_conjugate_gradient(
             max=20,
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_iter_{i:04}.png")
+        plt.savefig(f"{save_path}cg/iter_{i:04}.png")
 
         hp.mollview(
             y[:, 100],
@@ -249,15 +262,17 @@ def preconditioned_conjugate_gradient(
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_ifg_iter_{i:04}.png")
+        plt.savefig(f"{save_path}cg_ifg/iter_{i:04}.png")
         hp.mollview(
             r2[:, 100],
             title="IFG map at distance index 100",
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"../output/cg_res_ifg_iter_{i:04}.png")
+        plt.savefig(f"{save_path}cg_res_ifg/iter_{i:04}.png")
         plt.close()
+
+    return x
 
 
 # def solve_frequency(freq_i, ifg_data, pix_data, sigma):
