@@ -130,7 +130,6 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
     delta_new = np.dot(r.T, r)
     delta0 = delta_new
 
-
     for i in range(maxiter):
         print(f"CG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
         q = A_dot_x(d, pointing, sigma)
@@ -166,7 +165,8 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             max=20,
             coord=["E", "G"],
         )
-        plt.savefig(f'../output/cg_iter_{i:04}.png')
+        plt.savefig(f"../output/cg_iter_{i:04}.png")
+        plt.close()
 
         hp.mollview(
             y[:, 100],
@@ -174,21 +174,22 @@ def conjugate_gradient(pointing, sigma, b, x=None, maxiter=1000, tol=1e-10):
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f'../output/cg_ifg_iter_{i:04}.png')
+        plt.savefig(f"../output/cg_ifg_iter_{i:04}.png")
+        plt.close()
         hp.mollview(
             r2[:, 100],
             title="IFG map at distance index 100",
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f'../output/cg_res_ifg_iter_{i:04}.png')
+        plt.savefig(f"../output/cg_res_ifg_iter_{i:04}.png")
         plt.close()
 
     return x
 
 
 def preconditioned_conjugate_gradient(
-    b, pointing, sigma, hits_map, x=None, maxiter=1000, tol=1e-10
+    b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10
 ):
     if x is None:
         x = np.zeros_like(b)
@@ -198,7 +199,7 @@ def preconditioned_conjugate_gradient(
 
     # d = M_inv @ r
     d = np.zeros_like(r)
-    d[hits_map != 0] = r[hits_map != 0] / hits_map[hits_map != 0]
+    d[precond != 0] = r[precond != 0] / precond[precond != 0]
     delta_new = np.dot(r.T, d)
     delta0 = delta_new
 
@@ -217,7 +218,7 @@ def preconditioned_conjugate_gradient(
 
         # s = M_inv @ r
         s = np.zeros_like(r)
-        s[hits_map != 0] = r[hits_map != 0] / hits_map[hits_map != 0]
+        s[precond != 0] = r[precond != 0] / precond[precond != 0]
         delta_old = delta_new
         delta_new = np.dot(r.T, s)
 
@@ -226,6 +227,37 @@ def preconditioned_conjugate_gradient(
 
         if delta_new < tol**2 * delta0:
             break
+
+        y = x.reshape((g.NPIX, g.IFG_SIZE))
+        m = np.abs(np.fft.rfft(y, axis=1))
+
+        r2 = r.reshape((g.NPIX, g.IFG_SIZE))
+
+        hp.mollview(
+            m[:, 100],
+            title=f"CG map at frequency index 100 for iteration {i:04}",
+            unit="Amplitude",
+            min=0,
+            max=20,
+            coord=["E", "G"],
+        )
+        plt.savefig(f"../output/cg_iter_{i:04}.png")
+
+        hp.mollview(
+            y[:, 100],
+            title=f"IFG map at distance index 100 for iteration {i}",
+            unit="Amplitude",
+            coord=["E", "G"],
+        )
+        plt.savefig(f"../output/cg_ifg_iter_{i:04}.png")
+        hp.mollview(
+            r2[:, 100],
+            title="IFG map at distance index 100",
+            unit="Amplitude",
+            coord=["E", "G"],
+        )
+        plt.savefig(f"../output/cg_res_ifg_iter_{i:04}.png")
+        plt.close()
 
 
 # def solve_frequency(freq_i, ifg_data, pix_data, sigma):
@@ -315,9 +347,19 @@ if __name__ == "__main__":
     for pix_i in range(pix.shape[0] // g.IFG_SIZE):
         for x_i in range(g.IFG_SIZE):
             hits_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += 1
-    # M_inv = np.diag(1 / hits_map.flatten())
     hits_map = hits_map.flatten()
-    x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
+
+    rms_map = np.zeros((g.NPIX, g.IFG_SIZE))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE):
+        for x_i in range(g.IFG_SIZE):
+            rms_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += (
+                1 / sigma[pix_i * g.IFG_SIZE + x_i] ** 2
+            )
+    # M_inv = np.diag(1 / hits_map.flatten())
+    rms_map = np.sqrt(rms_map.flatten())
+
+    # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map)
 
     x = x.reshape((g.NPIX, g.IFG_SIZE))
     m = np.abs(np.fft.rfft(x, axis=1))
