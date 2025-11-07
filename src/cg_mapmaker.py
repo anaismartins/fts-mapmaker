@@ -213,10 +213,16 @@ def preconditioned_conjugate_gradient(
     # d = M_inv @ r
     d = np.zeros_like(r)
     d[precond != 0] = r[precond != 0] / precond[precond != 0]
+
+    # check why delta_new is nan
+    print("debug:", r, d)
     delta_new = np.dot(r.T, d)
     delta0 = delta_new
 
     for i in range(maxiter):
+        # check what is causing the nans in eps
+        print("debug:", delta_new, delta0, delta_new / delta0)
+
         print(f"PCG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
         q = A_dot_x(d, pointing, sigma, npix=npix)
 
@@ -254,7 +260,8 @@ def preconditioned_conjugate_gradient(
             max=20,
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}cg/iter_{i:04}.png")
+        plt.savefig(f"{save_path}maps/iter_{i:04}.png")
+        plt.close()
 
         hp.mollview(
             y[:, 100],
@@ -262,14 +269,15 @@ def preconditioned_conjugate_gradient(
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}cg_ifg/iter_{i:04}.png")
+        plt.savefig(f"{save_path}ifg/iter_{i:04}.png")
+        plt.close()
         hp.mollview(
             r2[:, 100],
             title="IFG map at distance index 100",
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}cg_res_ifg/iter_{i:04}.png")
+        plt.savefig(f"{save_path}res_ifg/iter_{i:04}.png")
         plt.close()
 
     return x
@@ -374,7 +382,9 @@ if __name__ == "__main__":
     rms_map = np.sqrt(rms_map.flatten())
 
     # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map)
+    x = preconditioned_conjugate_gradient(
+        b, pix, sigma, rms_map, save_path="../output/cg/"
+    )
 
     x = x.reshape((g.NPIX, g.IFG_SIZE))
     m = np.abs(np.fft.rfft(x, axis=1))

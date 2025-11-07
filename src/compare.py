@@ -18,7 +18,14 @@ import utils
 
 # plot simulated 545 map
 simulated_map = hp.read_map("../output/dust_maps/0544.fits")
-hp.mollview(simulated_map, title="Simulated 545 GHz map", unit="MJy/sr", min=0, max=50)
+hp.mollview(
+    simulated_map,
+    title="Simulated 545 GHz map",
+    unit="MJy/sr",
+    min=0,
+    max=50,
+    coord=["E", "G"],
+)
 hp.graticule()
 plt.savefig("../output/compare/simulated_map.png")
 plt.close()
