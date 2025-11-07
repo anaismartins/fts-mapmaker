@@ -8,6 +8,7 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
+import cg_mapmaker as cg
 import globals as g
 import sims.utils as sims
 import utils
@@ -145,5 +146,40 @@ for freq_i, freq in enumerate(frequencies):
         title=f"Map at {int(freq):04} GHz solved directly",
         unit="MJy/sr",
     )
-    plt.savefig(f"../output/demo/map_direct_{int(freq):04}_GHz.png")
+    plt.savefig(f"../output/demo/map_direct/{int(freq):04}_GHz.png")
     plt.close()
+
+print("Direct solution done.")
+
+# now we want to run our cg to see if it gives the same solutions
+# Flatten pix_ecl and expand sigma to match the expected format
+pix_ecl_flat = pix_ecl.flatten()
+sigma_expanded = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE)).flatten()
+
+print(f"Shape of pix_ecl_flat: {pix_ecl_flat.shape}")
+print(f"Shape of sigma_expanded: {sigma_expanded.shape}")
+
+rms_map = np.zeros((npix, g.IFG_SIZE))
+for pix_i in range(n_ifgs):
+    for x_i in range(g.IFG_SIZE):
+        pixel_idx = pix_ecl[pix_i, x_i]
+        rms_map[pixel_idx, x_i] += (
+            1 / sigma_expanded[pix_i * g.IFG_SIZE + x_i] ** 2
+        )
+rms_map = rms_map.flatten()
+
+print(f"Min/max of rms_map: {np.min(rms_map)}, {np.max(rms_map)}")
+print(f"Number of non-zero elements in rms_map: {np.count_nonzero(rms_map)}")
+
+# Make b complex to match the CG solver expectations
+b_complex = b.astype(np.complex128)
+
+x = cg.preconditioned_conjugate_gradient(
+    b_complex,
+    pix_ecl_flat,
+    sigma_expanded,
+    rms_map,
+    npix=npix,
+    save_path="../output/demo/iteration_maps/",
+)
+print("CG solution done.")
