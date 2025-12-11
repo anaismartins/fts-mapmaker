@@ -6,7 +6,10 @@ or in more simple terms we solve
 """
 
 import multiprocessing
+import os
+import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import healpy as hp
 import matplotlib.pyplot as plt
@@ -95,104 +98,6 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX):
     return A_x.flatten()
 
 
-def conjugate_gradient(
-    pointing, sigma, b, x=None, maxiter=1000, tol=1e-10, npix=g.NPIX
-):
-    """
-    Solve the equation A x = b using the conjugate gradient method. Taken from the Painless Conjugate Gradient paper.
-
-    Parameters
-    ----------
-    pointing : np.ndarray
-        The pointing matrix in pixel space.
-    sigma : np.ndarray
-        The noise standard deviation for each time sample.
-    b : np.ndarray
-        The vector b.
-    x : np.ndarray, optional
-        The initial guess for the solution x. If None, a zero vector is used.
-    maxiter : int, optional
-        The maximum number of iterations. Default is 1000.
-    tol : float, optional
-        The tolerance for convergence. Default is 1e-10.
-
-    Returns
-    -------
-    np.ndarray
-        The solution vector x.
-    """
-    if x is None:
-        x = np.zeros_like(b)
-
-    Ax = A_dot_x(x, pointing, sigma, npix=npix)
-    r = b - Ax
-
-    d = r
-
-    delta_new = np.dot(r.T, r)
-    delta0 = delta_new
-
-    for i in range(maxiter):
-        # check what is causing the nans in eps
-        print("debug:", delta_new, delta0, delta_new / delta0)
-
-        print(f"CG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
-        q = A_dot_x(d, pointing, sigma, npix=npix)
-
-        alpha = delta_new / np.dot(d.T, q)
-
-        x += alpha * d
-
-        if i % 50 == 0:
-            r = b - A_dot_x(x, pointing, sigma, npix=npix)
-        else:
-            r -= alpha * q
-
-        delta_old = delta_new
-        delta_new = np.dot(r.T, r)
-
-        beta = delta_new / delta_old
-        d = r + beta * d
-
-        if delta_new < tol**2 * delta0:
-            break
-
-        y = x.reshape((g.NPIX, g.IFG_SIZE))
-        m = np.abs(np.fft.rfft(y, axis=1))
-
-        r2 = r.reshape((g.NPIX, g.IFG_SIZE))
-
-        hp.mollview(
-            m[:, 100],
-            title="CG map at frequency index 100",
-            unit="Amplitude",
-            min=0,
-            max=20,
-            coord=["E", "G"],
-        )
-        plt.savefig(f"../output/cg/map/iter_{i:04}.png")
-        plt.close()
-
-        hp.mollview(
-            y[:, 100],
-            title="IFG map at distance index 100",
-            unit="Amplitude",
-            coord=["E", "G"],
-        )
-        plt.savefig(f"../output/cg/ifg/iter_{i:04}.png")
-        plt.close()
-        hp.mollview(
-            r2[:, 100],
-            title="IFG map at distance index 100",
-            unit="Amplitude",
-            coord=["E", "G"],
-        )
-        plt.savefig(f"../output/cg/res_ifg/iter_{i:04}.png")
-        plt.close()
-
-    return x
-
-
 def preconditioned_conjugate_gradient(
     b,
     pointing,
@@ -208,6 +113,7 @@ def preconditioned_conjugate_gradient(
         x = np.zeros_like(b)
 
     Ax = A_dot_x(x, pointing, sigma, npix=npix)
+    print(f"b: {b}")
     r = b - Ax
 
     # d = M_inv @ r
@@ -219,9 +125,21 @@ def preconditioned_conjugate_gradient(
     delta_new = np.dot(r.T, d)
     delta0 = delta_new
 
+    # clear output from previous runs
+    if save_path is not None:
+        if os.path.exists(f"{save_path}maps/"):
+            shutil.rmtree(f"{save_path}maps/")
+        os.makedirs(f"{save_path}maps/")
+        if os.path.exists(f"{save_path}ifg/"):
+            shutil.rmtree(f"{save_path}ifg/")
+        os.makedirs(f"{save_path}ifg/")
+        if os.path.exists(f"{save_path}res_ifg/"):
+            shutil.rmtree(f"{save_path}res_ifg/")
+        os.makedirs(f"{save_path}res_ifg/")
+
     for i in range(maxiter):
         # check what is causing the nans in eps
-        print("debug:", delta_new, delta0, delta_new / delta0)
+        # print("debug:", delta_new, delta0, delta_new / delta0)
 
         print(f"PCG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
         q = A_dot_x(d, pointing, sigma, npix=npix)
@@ -283,20 +201,6 @@ def preconditioned_conjugate_gradient(
     return x
 
 
-# def solve_frequency(freq_i, ifg_data, pix_data, sigma):
-#     """Solve for a single frequency index."""
-#     print(f"{(freq_i+1):03d}/{ifgs.shape[1]}: Started.")
-#     t1 = time.time()
-
-#     b = calculate_b(ifg_data, pix_data, sigma)
-#     x_freq = conjugate_gradient(pix_data, sigma, b, tol=1e-4, freq_i=freq_i)
-
-#     t2 = time.time()
-#     print(f"{(freq_i+1):03d}/{ifgs.shape[1]}: Finished in {int((t2 - t1))} seconds.")
-
-#     return freq_i, x_freq
-
-
 if __name__ == "__main__":
     t1 = time.time()
     print("Initializing CG mapmaker...")
@@ -324,7 +228,10 @@ if __name__ == "__main__":
     print(f"shape of pix after flatten: {pix.shape}")
 
     print(f"shape of sigma before flatten: {sigma.shape}")
-    sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE)).flatten()
+    if g.SIM_TYPE == "modern":
+        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE)).flatten()
+    elif g.SIM_TYPE == "firas":
+        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE, g.N_IFGS))).flatten()
     print(f"shape of sigma after flatten: {sigma.shape}")
 
     plt.vlines(
@@ -348,21 +255,6 @@ if __name__ == "__main__":
 
     b = calculate_b(ifgs, pix, sigma)
 
-    # debug
-    b_map = b.reshape((g.NPIX, g.IFG_SIZE))
-    b_map = np.abs(np.fft.rfft(b_map, axis=1))
-    # hp.mollview(
-    #     b_map[:, 100],
-    #     title="b map at frequency index 100",
-    #     unit="Amplitude",
-    #     min=0,
-    #     max=200,
-    #     coord=["E", "G"],
-    # )
-    # plt.show()
-    # plt.savefig("../output/b_map_debug.png")
-    # plt.close()
-
     print(f"Starting conjugate gradient solver...")
 
     # set M to be the hits map
@@ -378,7 +270,6 @@ if __name__ == "__main__":
             rms_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += (
                 1 / sigma[pix_i * g.IFG_SIZE + x_i] ** 2
             )
-    # M_inv = np.diag(1 / hits_map.flatten())
     rms_map = np.sqrt(rms_map.flatten())
 
     # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
@@ -394,8 +285,12 @@ if __name__ == "__main__":
 
     frequencies = utils.generate_frequencies("ll", "ss", 257)
     t1 = time.time()
-    # Save maps serially to avoid threading issues with matplotlib/Qt
-    for nui, freq in enumerate(frequencies):
-        utils.save_maps(freq, m[:, nui])
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for nui, freq in enumerate(frequencies):
+            futures.append(executor.submit(utils.save_maps, freq, m[:, nui]))
+        # Ensure all are completed
+        for future in as_completed(futures):
+            future.result()
     t2 = time.time()
     print(f"Finished saving maps in {int((t2 - t1))} seconds.")

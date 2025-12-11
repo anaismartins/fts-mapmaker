@@ -39,24 +39,21 @@ ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
 ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
 scan_dir = sky_data["df_data"]["scan"][ss_filter]
 
-npixperifg = 512
-n_ifgs = 16
-
 total_time = 55.36  # seconds
 flyback_time = 0.42  # seconds
-time_per_ifg = total_time / n_ifgs  # seconds
+time_per_ifg = total_time / g.N_IFGS  # seconds
 time_per_ifg_on_source = time_per_ifg - flyback_time  # seconds
 
 speed_deg_per_min = 3.5
 speed = speed_deg_per_min / 60  # degrees per second
 
 # Initialize array to hold ecl_lat for all IFGs
-ecl_lats = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=float)
+ecl_lats = np.zeros((len(ecl_lat), g.NPIXPERIFG, g.N_IFGS), dtype=float)
 
 # Compute starting positions for each IFG
 t1 = time.time()
-for ifg_i in range(n_ifgs):
-    print(f"Computing latitudes for IFG {ifg_i+1}/{n_ifgs}")
+for ifg_i in range(g.N_IFGS):
+    print(f"Computing latitudes for IFG {ifg_i+1}/{g.N_IFGS}")
     # Initial position for this IFG
     start_offset = (speed * total_time / 2) * scan_dir
     flyback_offset = speed * flyback_time * scan_dir * ifg_i
@@ -68,31 +65,32 @@ for ifg_i in range(n_ifgs):
     )
 
     # Fill in pixel positions for this IFG
-    for pix in range(npixperifg):
-        ecl_lats[ifg_i, :, pix] = (
-            ecl_lat_init + speed * time_per_ifg_on_source * scan_dir * pix / npixperifg
+    for pix in range(g.NPIXPERIFG):
+        ecl_lats[:, pix, ifg_i] = (
+            ecl_lat_init
+            + speed * time_per_ifg_on_source * scan_dir * pix / g.NPIXPERIFG
         )
         # adjust latitudes to be in the range [-90, 90]
-        ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] = (
-            -ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] < -90] - 180
+        ecl_lats[:, pix, ifg_i][ecl_lats[:, pix, ifg_i] < -90] = (
+            -ecl_lats[:, pix, ifg_i][ecl_lats[:, pix, ifg_i] < -90] - 180
         )
-        ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90] = (
-            180 - ecl_lats[ifg_i, :, pix][ecl_lats[ifg_i, :, pix] > 90]
+        ecl_lats[:, pix, ifg_i][ecl_lats[:, pix, ifg_i] > 90] = (
+            180 - ecl_lats[:, pix, ifg_i][ecl_lats[:, pix, ifg_i] > 90]
         )
 t2 = time.time()
 print(f"Time taken for computing the latitudes: {t2-t1} seconds")
 
 t1 = time.time()
-pix_ecl = np.zeros((n_ifgs, len(ecl_lat), npixperifg), dtype=int)
+pix_ecl = np.zeros((len(ecl_lat), g.NPIXPERIFG, g.N_IFGS), dtype=int)
 # Vectorized computation of pixel indices for all IFGs and pixels
-for ifg_i in range(n_ifgs):
-    print(f"Computing pixel indices for IFG {ifg_i+1}/{n_ifgs}")
+for ifg_i in range(g.N_IFGS):
+    print(f"Computing pixel indices for IFG {ifg_i+1}/{g.N_IFGS}")
     # ecl_lon shape: (N,), ecl_lats[ifg_i] shape: (N, npixperifg)
     # Broadcast ecl_lon to (N, npixperifg) for vectorized ang2pix
-    pix_ecl[ifg_i] = hp.ang2pix(
+    pix_ecl[:, :, ifg_i] = hp.ang2pix(
         g.NSIDE,
-        np.broadcast_to(ecl_lon[:, None], ecl_lats[ifg_i].shape),
-        ecl_lats[ifg_i],
+        np.broadcast_to(ecl_lon[:, None], ecl_lats[:, :, ifg_i].shape),
+        ecl_lats[:, :, ifg_i],
         lonlat=True,
     )
 t2 = time.time()
@@ -107,7 +105,7 @@ print(f"Time taken for computing the pixel indices: {t2-t1} seconds")
 
 print("Saving hit map")
 npix = hp.nside2npix(g.NSIDE)
-hit_map = np.bincount(pix_ecl.flatten(), minlength=npix) / n_ifgs / npixperifg
+hit_map = np.bincount(pix_ecl.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG
 mask = hit_map == 0
 hit_map[mask] = np.nan
 if g.PNG:
@@ -137,22 +135,22 @@ if g.FITS:
 
 # Combine each of the 16 IFGs, filling all 512 points for each IFG
 t1 = time.time()
-ifgs = np.zeros((n_ifgs, pix_ecl.shape[1], npixperifg))  # 16 x npix x 512
+ifgs = np.zeros((pix_ecl.shape[0], g.NPIXPERIFG, g.N_IFGS))  # 16 x npix x 512
 # Vectorized assignment to speed up frankensteining IFGs
-for ifg_i in range(n_ifgs):
-    print(f"Frankensteining IFG {ifg_i+1}/{n_ifgs}")
+for ifg_i in range(g.N_IFGS):
+    print(f"Frankensteining IFG {ifg_i+1}/{g.N_IFGS}")
     # pix_ecl[ifg_i]: shape (num_pixels, npixperifg)
     # Use advanced indexing to assign all IFG values at once
-    ifgs[ifg_i, :, :] = ifg[pix_ecl[ifg_i], np.arange(npixperifg)]
+    ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG)]
 t2 = time.time()
 print(f"Time taken for frankensteining the IFGs: {t2-t1} seconds")
 
 # and lastly we add the 16 ifgs together
-total_ifg = np.sum(ifgs, axis=0)
+total_ifg = np.sum(ifgs, axis=2)
 
 fig, ax = plt.subplots(2, 1, figsize=(10, 8))
 n = np.random.randint(0, total_ifg.shape[0])
-ax[0].plot(ifgs[:, n, :].T, alpha=0.5)
+ax[0].plot(ifgs[n].T, alpha=0.5)
 ax[0].set_title(f"IFGs for pixel {n}")
 ax[0].set_ylabel("Interferogram")
 ax[1].plot(total_ifg[n])
@@ -163,9 +161,9 @@ plt.savefig(f"../output/sim_firas/ifg/{n}.png")
 plt.close()
 
 # plot pixels hit on a map
-pix_to_map = np.zeros(n_ifgs * npixperifg, dtype=int)
-for ifg_i in range(n_ifgs):
-    pix_to_map[ifg_i * npixperifg : (ifg_i + 1) * npixperifg] = pix_ecl[ifg_i, n]
+pix_to_map = np.zeros(g.N_IFGS * g.NPIXPERIFG, dtype=int)
+for ifg_i in range(g.N_IFGS):
+    pix_to_map[ifg_i * g.NPIXPERIFG : (ifg_i + 1) * g.NPIXPERIFG] = pix_ecl[n, :, ifg_i]
 map_pix = np.bincount(pix_to_map, minlength=npix)
 
 # Create a two-panel figure: full sky + zoomed view
@@ -179,7 +177,7 @@ hp.mollview(
     unit="Hits",
     min=0,
     # max=map_pix.max(),
-    max=n_ifgs * npixperifg,  # Maximum possible hits
+    max=g.N_IFGS * g.NPIXPERIFG,  # Maximum possible hits
     xsize=2000,
     coord="E",
     cmap="Reds",
@@ -208,7 +206,7 @@ hp.gnomview(
     unit="Hits",
     min=0,
     # max=map_pix.max(),
-    max=n_ifgs * npixperifg,  # Maximum possible hits
+    max=g.FITS * g.NPIXPERIFG,  # Maximum possible hits
     xsize=800,
     coord="E",
     cmap="Reds",

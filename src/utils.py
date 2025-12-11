@@ -59,7 +59,7 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
     return s_d
 
 
-def generate_frequencies(channel, mode, nfreq=None):
+def generate_frequencies(channel='ll', mode='ss', nfreq=257):
     """
     Generates an array with the frequencies in GHz for the given channel and mode.
 
@@ -84,29 +84,37 @@ def generate_frequencies(channel, mode, nfreq=None):
     else:
         raise ValueError("Channel must be either int or str")
 
-    nu0 = {"ss": 68.020812, "lf": 23.807283}
-    dnu = {"ss": 13.604162, "lf": 3.4010405}
-    nf = {
-        "lh_ss": 210,
-        "ll_lf": 182,
-        "ll_ss": 43,
-        "rh_ss": 210,
-        "rl_lf": 182,
-        "rl_ss": 43,
-    }
+    if g.SIM_TYPE == "firas":
+        nu0 = {"ss": 68.020812, "lf": 23.807283}
+        dnu = {"ss": 13.604162, "lf": 3.4010405}
+        nf = {
+            "lh_ss": 210,
+            "ll_lf": 182,
+            "ll_ss": 43,
+            "rh_ss": 210,
+            "rl_lf": 182,
+            "rl_ss": 43,
+        }
 
-    if not (mode == "lf" and (channel_str == "lh" or channel_str == "rh")):
-        if nfreq == None:
-            nfreq = nf[f"{channel_str}_{mode}"]
-            f_ghz = np.linspace(
-                nu0[mode],
-                nu0[mode] + dnu[mode] * (nfreq - 1),
-                nfreq,
-            )
+        if not (mode == "lf" and (channel_str == "lh" or channel_str == "rh")):
+            if nfreq == None:
+                nfreq = nf[f"{channel_str}_{mode}"]
+                f_ghz = np.linspace(
+                    nu0[mode],
+                    nu0[mode] + dnu[mode] * (nfreq - 1),
+                    nfreq,
+                )
+            else:
+                f_ghz = np.linspace(0, dnu[mode] * (nfreq - 1), nfreq)
         else:
-            f_ghz = np.linspace(0, dnu[mode] * (nfreq - 1), nfreq)
+            raise ValueError("Invalid channel and mode combination")
+    elif g.SIM_TYPE == "fossil":
+        dnu = 15.0 # GHz
+        nu0 = 30.0 # GHz
+
+        f_ghz = np.arange(nu0, 2000, dnu)
     else:
-        raise ValueError("Invalid channel and mode combination")
+        raise ValueError("SIM_TYPE must be either 'firas' or 'fossil'")
 
     return f_ghz
 
@@ -131,3 +139,7 @@ def save_maps(freq, m):
         )
         plt.savefig(f"../output/cg_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.png")
         plt.close()
+
+if __name__ == "__main__":
+    # test generate_frequencies
+    f_ghz = generate_frequencies()
