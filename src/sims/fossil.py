@@ -70,6 +70,7 @@ full_sky = 365.25 / 2 * 24 * 3600 # 6 months in seconds
 ecl_pole_vec = np.vstack([0, 0, 1])
 
 batch_duration = 1
+coarse_step_sec = 600
 
 def calculate_batch(batch_idx):
     """
@@ -85,7 +86,7 @@ def calculate_batch(batch_idx):
     # if spiceypy.ktotal('ALL') == 0:
     #     kernel_meta = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kernel_meta.txt')
     #     spiceypy.furnsh(kernel_meta)
-    
+
     # set up times
     # start time is the start date offset by whiever batch idx we are at
     start_day = batch_idx * batch_duration
@@ -98,15 +99,28 @@ def calculate_batch(batch_idx):
     # time in seconds, but we want to get one pointing per ifg point
     # we need it more fine-grained than seconds
     t_seconds = np.linspace(0, batch_duration_sec, one_pointing)
-    t_coarse = np.arange(0, batch_size, 600) # every 10 minutes
+    t_coarse = np.arange(0, batch_duration_sec, coarse_step_sec)  # every 10 minutes
 
     t1 = time()
     obs_times = start_time + t_coarse * u.s
     # Convert datetime to list of datetimes by adding timedeltas
     # obs_times = [start_time + timedelta(seconds=float(t)) for t in t_coarse]
     # get sun positions
-    sun_coords = get_sun(obs_times).transform_to('geocentrictrueecliptic')
-    anti_sun_lon = sun_coords.lon.rad + np.pi # rad
+    if os.path.exists(
+        f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy"
+    ):
+        print(f"    Loading precomputed anti_sun_lon for batch {batch_idx}...")
+        anti_sun_lon = np.load(
+            f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy"
+        )
+    else:
+        print(f"    Saving anti_sun_lon for batch {batch_idx}...")
+        sun_coords = get_sun(obs_times).transform_to("geocentrictrueecliptic")
+        anti_sun_lon = sun_coords.lon.rad + np.pi  # rad
+        np.save(
+            f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy",
+            anti_sun_lon,
+        )
 
     # # interpolate
     cos_interp = np.interp(t_seconds, t_coarse, np.cos(anti_sun_lon))
@@ -114,70 +128,125 @@ def calculate_batch(batch_idx):
     norm = np.sqrt(cos_interp**2 + sin_interp**2)
     anti_sun_lon = np.arctan2(sin_interp / norm, cos_interp / norm)
 
-    # get L2 ephemeris
-    # solsys_dict = {'SSB': 0, 'SUN': 10, 'EARTH': 399, 'L2': 392}
-
-    # start_date = datetime(year=2041, month=1, day=1, hour=0, minute=0, second=0)
-    # start_time_offset = timedelta(seconds=batch_idx * batch_size)
-    # # start_time = start_date + start_time_offset
-    # # end_time = start_time + timedelta(seconds=batch_size)
-    
-    # # start_time_UTC_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
-    # start_time_UTC_str = start_date.strftime('%Y-%m-%dT%H:%M:%S')
-    # # end_time_UTC_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
-
-    # start_time_ET = spiceypy.str2et(start_time_UTC_str)
-    # end_time_ET = spiceypy.str2et(end_time_UTC_str)
-
-    # time_interval_et = np.arange(start_time_ET, end_time_ET, 600)
-
-    # posvec_ecl, ltt = spiceypy.spkezp(targ=solsys_dict['L2'], et=time_interval_et, ref='ECLIPJ2000',
-    #                                   abcorr='LT',obs=solsys_dict['EARTH'])
-    # # check these results
-    # posvec_ecl = np.array(posvec_ecl) # shape (N, 3)
-    # print(f"    Calculated L2 positions for {len(time_interval_et)} time points.")
-    # print(posvec_ecl)
-
-    # if start_time_ET is not None:
-    #     return 
-
-    # set up coordinate basis in ecliptic polar coordinates
+    # generate basis for anti-sun coordinate system
     anti_sun_cos = np.cos(anti_sun_lon)
     anti_sun_sin = np.sin(anti_sun_lon)
+    a_vec = np.vstack([anti_sun_cos, anti_sun_sin, np.zeros_like(anti_sun_lon)]).T
+    b_vec = np.vstack([-anti_sun_sin, anti_sun_cos, np.zeros_like(anti_sun_lon)]).T
+    c_vec = np.array([0.0, 0.0, 1.0])
 
-    n_points = len(anti_sun_lon)
-    anti_sun_vec = np.vstack([anti_sun_cos, anti_sun_sin, np.zeros(n_points)])
-    anti_sun_perp_vec = np.vstack([-anti_sun_sin, anti_sun_cos, np.zeros(n_points)])
-    # print(f"Calculated basis vectors with shape: {anti_sun_vec.shape}")
+    # generate basis spin
+    tilt_angle = np.deg2rad(spin_axis_tilt)  # radians
+    six_months = 182.625 * 24 * 3600  # seconds
+    precession_phase = (
+        2 * np.pi * (start_day * 24 * 3600 + t_seconds) / six_months
+    )  # radians
+    s_vec = np.cos(tilt_angle) * a_vec + np.sin(tilt_angle) * (
+        np.cos(precession_phase)[:, np.newaxis] * b_vec
+        + np.sin(precession_phase)[:, np.newaxis] * c_vec
+    )
+    u_vec = np.cross(s_vec, c_vec)
+    v_vec = np.cross(s_vec, u_vec)
 
-    # use basis vectors to calculate precession pattern
-    # generate time arrays again to not use astropy units
-    t = np.arange(0, batch_size, one_pointing)
-    times = batch_idx * batch_size + t
+    # calculate line-of-sight vector in ecliptic coordinates
+    spin_phase = (2 * np.pi * spin_rate / 60.0) * (
+        start_day * 24 * 3600 + t_seconds
+    )  # radians
+    los_angle_rad = np.deg2rad(los_angle)  # radians
+    los_cos = np.cos(los_angle_rad)
+    los_sin = np.sin(los_angle_rad)
+    spin_cos = np.cos(spin_phase)[:, np.newaxis]
+    spin_sin = np.sin(spin_phase)[:, np.newaxis]
+    z_vec_ecliptic = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
 
-    precession_phase = 2 * np.pi * times / full_sky
-    spin_phase = 2 * np.pi * speed * times
+    # calculate orbital dipole parameters
+    v_orbital_vec = V_ORBITAL_SPEED * b_vec
+    beta_vec = v_orbital_vec / C_LIGHT
+    beta_mag_sq = (V_ORBITAL_SPEED / C_LIGHT) ** 2
+    gamma = 1.0 / np.sqrt(1.0 - beta_mag_sq)
+    dot_product = np.sum(beta_vec * z_vec_ecliptic, axis=1)
+    orbital_dipole_amplitude = T_CMB * ((1.0 / (gamma * (1.0 - dot_product))) - 1.0)
 
-    precession_cos = np.cos(precession_phase)
-    precession_sin = np.sin(precession_phase)
-    spin_vec = (tilt_cos * anti_sun_vec +
-                tilt_sin * (precession_cos * anti_sun_perp_vec + precession_sin * ecl_pole_vec))
-    # print(f"Calculated spin_vec with shape: {spin_vec.shape}")
+    # transform pointing and velocity vectors to galactic coordinates
+    ecl_basis = SkyCoord(
+        x=[1, 0, 0],
+        y=[0, 1, 0],
+        z=[0, 0, 1],
+        representation_type="cartesian",
+        frame="geocentrictrueecliptic",
+    )
+    ecl_to_gal_matrix = ecl_basis.transform_to("galactic").cartesian.xyz.value
+    z_vec_galactic = z_vec_ecliptic @ ecl_to_gal_matrix.T
+    v_orbital_vec_galactic = v_orbital_vec @ ecl_to_gal_matrix.T
 
-    # generate new basis around the spin vector
-    spin_perp_vec1 = np.cross(spin_vec, ecl_pole_vec, axis=0)
-    spin_perp_vec2 = np.cross(spin_vec, spin_perp_vec1, axis=0)
+    # convert pointing vectors to spherical coordinates
+    theta, phi = hp.vec2ang(z_vec_galactic)
+    return theta, phi, v_orbital_vec_galactic, orbital_dipole_amplitude
 
-    # calculate line of sight
-    spin_cos = np.cos(spin_phase)
-    spin_sin = np.sin(spin_phase)
-    los_vec = (los_cos * spin_vec +
-               los_sin * (spin_cos * spin_perp_vec1 + spin_sin * spin_perp_vec2))
+    # # get L2 ephemeris
+    # # solsys_dict = {'SSB': 0, 'SUN': 10, 'EARTH': 399, 'L2': 392}
 
-    theta, phi = hp.vec2ang(los_vec)
-    
-    print(f"  Completed batch {batch_idx + 1} ({len(theta)} pointings in {time() - t1:.2f}s)")
-    return theta, phi
+    # # start_date = datetime(year=2041, month=1, day=1, hour=0, minute=0, second=0)
+    # # start_time_offset = timedelta(seconds=batch_idx * batch_size)
+    # # # start_time = start_date + start_time_offset
+    # # # end_time = start_time + timedelta(seconds=batch_size)
+
+    # # # start_time_UTC_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+    # # start_time_UTC_str = start_date.strftime('%Y-%m-%dT%H:%M:%S')
+    # # # end_time_UTC_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+
+    # # start_time_ET = spiceypy.str2et(start_time_UTC_str)
+    # # end_time_ET = spiceypy.str2et(end_time_UTC_str)
+
+    # # time_interval_et = np.arange(start_time_ET, end_time_ET, 600)
+
+    # # posvec_ecl, ltt = spiceypy.spkezp(targ=solsys_dict['L2'], et=time_interval_et, ref='ECLIPJ2000',
+    # #                                   abcorr='LT',obs=solsys_dict['EARTH'])
+    # # # check these results
+    # # posvec_ecl = np.array(posvec_ecl) # shape (N, 3)
+    # # print(f"    Calculated L2 positions for {len(time_interval_et)} time points.")
+    # # print(posvec_ecl)
+
+    # # if start_time_ET is not None:
+    # #     return
+
+    # # set up coordinate basis in ecliptic polar coordinates
+    # anti_sun_cos = np.cos(anti_sun_lon)
+    # anti_sun_sin = np.sin(anti_sun_lon)
+
+    # n_points = len(anti_sun_lon)
+    # anti_sun_vec = np.vstack([anti_sun_cos, anti_sun_sin, np.zeros(n_points)])
+    # anti_sun_perp_vec = np.vstack([-anti_sun_sin, anti_sun_cos, np.zeros(n_points)])
+    # # print(f"Calculated basis vectors with shape: {anti_sun_vec.shape}")
+
+    # # use basis vectors to calculate precession pattern
+    # # generate time arrays again to not use astropy units
+    # t = np.arange(0, batch_size, one_pointing)
+    # times = batch_idx * batch_size + t
+
+    # precession_phase = 2 * np.pi * times / full_sky
+    # spin_phase = 2 * np.pi * speed * times
+
+    # precession_cos = np.cos(precession_phase)
+    # precession_sin = np.sin(precession_phase)
+    # spin_vec = (tilt_cos * anti_sun_vec +
+    #             tilt_sin * (precession_cos * anti_sun_perp_vec + precession_sin * ecl_pole_vec))
+    # # print(f"Calculated spin_vec with shape: {spin_vec.shape}")
+
+    # # generate new basis around the spin vector
+    # spin_perp_vec1 = np.cross(spin_vec, ecl_pole_vec, axis=0)
+    # spin_perp_vec2 = np.cross(spin_vec, spin_perp_vec1, axis=0)
+
+    # # calculate line of sight
+    # spin_cos = np.cos(spin_phase)
+    # spin_sin = np.sin(spin_phase)
+    # los_vec = (los_cos * spin_vec +
+    #            los_sin * (spin_cos * spin_perp_vec1 + spin_sin * spin_perp_vec2))
+
+    # theta, phi = hp.vec2ang(los_vec)
+
+    # print(f"  Completed batch {batch_idx + 1} ({len(theta)} pointings in {time() - t1:.2f}s)")
+    # return theta, phi
 
 # run for full survey  using parallelization
 n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
