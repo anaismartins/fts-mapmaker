@@ -163,23 +163,20 @@ rms_map = np.zeros((npix, g.IFG_SIZE))
 for pix_i in range(n_ifgs):
     for x_i in range(g.IFG_SIZE):
         pixel_idx = pix_ecl[pix_i, x_i]
-        rms_map[pixel_idx, x_i] += (
-            1 / sigma_expanded[pix_i * g.IFG_SIZE + x_i] ** 2
-        )
+        rms_map[pixel_idx, x_i] += 1 / sigma_expanded[pix_i * g.IFG_SIZE + x_i] ** 2
 rms_map = rms_map.flatten()
 
 print(f"Min/max of rms_map: {np.min(rms_map)}, {np.max(rms_map)}")
 print(f"Number of non-zero elements in rms_map: {np.count_nonzero(rms_map)}")
 
-# Make b complex to match the CG solver expectations
-b_complex = b.astype(np.complex128)
+b = cg.calculate_b(ifg_scanning, pix_ecl_flat, sigma_expanded)
 
 x = cg.preconditioned_conjugate_gradient(
-    b_complex,
+    b,
     pix_ecl_flat,
     sigma_expanded,
     rms_map,
     npix=npix,
-    save_path="../output/demo/iteration_maps/",
+    save_path="../output/demo/iterations/",
 )
 print("CG solution done.")

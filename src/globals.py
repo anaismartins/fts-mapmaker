@@ -4,10 +4,17 @@ SPEC_SIZE = 257
 PNG = True
 FITS = True
 
-NSIDE = 32
-NPIX = 12 * NSIDE**2
+BEAM = {}
+BEAM["fossil"] = 2.0 # degrees
+BEAM["firas"] = 7.0 # degrees
 
-SIM_TYPE = "modern"  # "firas" or "modern"
+NSIDE = {}
+NSIDE["fossil"] = 128
+NSIDE["firas"] = 32
+
+SIM_TYPE = "fossil"  # "fossil" or "firas"
+
+NPIX = 12 * NSIDE[SIM_TYPE]**2
 NPIXPERIFG = 512
 N_IFGS = 16
 
