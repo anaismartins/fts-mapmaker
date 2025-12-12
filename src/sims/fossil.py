@@ -27,37 +27,39 @@ from sims.scanning_strategy import generate_scanning_strategy
 warnings.filterwarnings('ignore', category=ErfaWarning)
 
 # instrument parameters
-# survey_len = 4 # years
-survey_len = 30 / 12 # years
+survey_len = 4 # years
+# survey_len = 30 / 12 # years
 survey_time = survey_len * 365.25 * 24 * 3600 # seconds
 
 obs_eff = 0.7
 
-samp_rate = 32.5 # Hz
-one_pointing = 1 / samp_rate # seconds
+# samp_rate = 32.5 # Hz
+# one_pointing = 1 / samp_rate # seconds
 
-# one_ifg = 3.04 # seconds
+one_ifg = 3.04 # seconds
 
 # n_ifgs = survey_time * obs_eff // one_ifg
 # print(f"Total number of IFGs taken: {n_ifgs}")
 
-# one_pointing = one_ifg / g.NPIXPERIFG # seconds
-# n_total_pointings = survey_time * obs_eff // one_pointing
+one_pointing = one_ifg / g.NPIXPERIFG # seconds
+n_total_pointings = int(survey_time * obs_eff // one_pointing)
 
-# speed = 0.3 # deg/min - planck is 1 rpm
-# speed = speed / 60 # deg/s
-# speed = speed / 360 # rotations per second
-speed = 1 # rpm
-speed = speed / 60 # rps
+speed = 0.3 # deg/min - planck is 1 rpm
+speed = speed / 60 # deg/s
+speed = speed / 360 # rotations per second
+spin_rate = speed * 60 # rpm
+# speed = 1 # rpm
+# speed = speed / 60 # rps
+# spin_rate = speed
 
-# spin_axis_tilt = 5 # deg
-spin_axis_tilt = 7.5 # deg
+spin_axis_tilt = 5 # deg
+# spin_axis_tilt = 7.5 # deg
 spin_axis_tilt = np.deg2rad(spin_axis_tilt)
 tilt_cos = np.cos(spin_axis_tilt)
 tilt_sin = np.sin(spin_axis_tilt)
 
-# los_angle = 87 # deg
-los_angle = 85 # deg
+los_angle = 87 # deg
+# los_angle = 85 # deg
 los_angle = np.deg2rad(los_angle)
 los_cos = np.cos(los_angle)
 los_sin = np.sin(los_angle)
@@ -70,7 +72,7 @@ full_sky = 365.25 / 2 * 24 * 3600 # 6 months in seconds
 ecl_pole_vec = np.vstack([0, 0, 1])
 
 batch_duration = 1
-coarse_step_sec = 600
+coarse_step_sec = 600 # every 10 minutes
 
 def calculate_batch(batch_idx):
     """
@@ -94,37 +96,25 @@ def calculate_batch(batch_idx):
     start_time = Time('2041-01-01T00:00:00') + start_time_offset
 
     batch_duration_sec = batch_duration * 24 * 3600 # seconds
-    n_samples = (batch_duration_sec * samp_rate)
 
     # time in seconds, but we want to get one pointing per ifg point
     # we need it more fine-grained than seconds
-    t_seconds = np.linspace(0, batch_duration_sec, one_pointing)
-    t_coarse = np.arange(0, batch_duration_sec, coarse_step_sec)  # every 10 minutes
+    n_pointings_batch = int(batch_duration_sec / one_pointing)
+    t_seconds = np.linspace(0, batch_duration_sec, n_pointings_batch, endpoint=False)
+    t_coarse = np.arange(0, batch_duration_sec + coarse_step_sec, coarse_step_sec)  
 
     t1 = time()
     obs_times = start_time + t_coarse * u.s
     # Convert datetime to list of datetimes by adding timedeltas
     # obs_times = [start_time + timedelta(seconds=float(t)) for t in t_coarse]
     # get sun positions
-    if os.path.exists(
-        f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy"
-    ):
-        print(f"    Loading precomputed anti_sun_lon for batch {batch_idx}...")
-        anti_sun_lon = np.load(
-            f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy"
-        )
-    else:
-        print(f"    Saving anti_sun_lon for batch {batch_idx}...")
-        sun_coords = get_sun(obs_times).transform_to("geocentrictrueecliptic")
-        anti_sun_lon = sun_coords.lon.rad + np.pi  # rad
-        np.save(
-            f"../output/sims/ephemeris_planck_samp_rate/anti_sun_lon_batch_{batch_idx}.npy",
-            anti_sun_lon,
-        )
+
+    sun_coords_coarse = get_sun(obs_times).transform_to("geocentrictrueecliptic")
+    anti_sun_lon_coarse = sun_coords_coarse.lon.rad + np.pi  # rad
 
     # # interpolate
-    cos_interp = np.interp(t_seconds, t_coarse, np.cos(anti_sun_lon))
-    sin_interp = np.interp(t_seconds, t_coarse, np.sin(anti_sun_lon))
+    cos_interp = np.interp(t_seconds, t_coarse, np.cos(anti_sun_lon_coarse))
+    sin_interp = np.interp(t_seconds, t_coarse, np.sin(anti_sun_lon_coarse))
     norm = np.sqrt(cos_interp**2 + sin_interp**2)
     anti_sun_lon = np.arctan2(sin_interp / norm, cos_interp / norm)
 
@@ -152,36 +142,9 @@ def calculate_batch(batch_idx):
     spin_phase = (2 * np.pi * spin_rate / 60.0) * (
         start_day * 24 * 3600 + t_seconds
     )  # radians
-    los_angle_rad = np.deg2rad(los_angle)  # radians
-    los_cos = np.cos(los_angle_rad)
-    los_sin = np.sin(los_angle_rad)
     spin_cos = np.cos(spin_phase)[:, np.newaxis]
     spin_sin = np.sin(spin_phase)[:, np.newaxis]
-    z_vec_ecliptic = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
-
-    # calculate orbital dipole parameters
-    v_orbital_vec = V_ORBITAL_SPEED * b_vec
-    beta_vec = v_orbital_vec / C_LIGHT
-    beta_mag_sq = (V_ORBITAL_SPEED / C_LIGHT) ** 2
-    gamma = 1.0 / np.sqrt(1.0 - beta_mag_sq)
-    dot_product = np.sum(beta_vec * z_vec_ecliptic, axis=1)
-    orbital_dipole_amplitude = T_CMB * ((1.0 / (gamma * (1.0 - dot_product))) - 1.0)
-
-    # transform pointing and velocity vectors to galactic coordinates
-    ecl_basis = SkyCoord(
-        x=[1, 0, 0],
-        y=[0, 1, 0],
-        z=[0, 0, 1],
-        representation_type="cartesian",
-        frame="geocentrictrueecliptic",
-    )
-    ecl_to_gal_matrix = ecl_basis.transform_to("galactic").cartesian.xyz.value
-    z_vec_galactic = z_vec_ecliptic @ ecl_to_gal_matrix.T
-    v_orbital_vec_galactic = v_orbital_vec @ ecl_to_gal_matrix.T
-
-    # convert pointing vectors to spherical coordinates
-    theta, phi = hp.vec2ang(z_vec_galactic)
-    return theta, phi, v_orbital_vec_galactic, orbital_dipole_amplitude
+    los_vec = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
 
     # # get L2 ephemeris
     # # solsys_dict = {'SSB': 0, 'SUN': 10, 'EARTH': 399, 'L2': 392}
@@ -210,43 +173,20 @@ def calculate_batch(batch_idx):
     # # if start_time_ET is not None:
     # #     return
 
-    # # set up coordinate basis in ecliptic polar coordinates
-    # anti_sun_cos = np.cos(anti_sun_lon)
-    # anti_sun_sin = np.sin(anti_sun_lon)
+    theta, phi = hp.vec2ang(los_vec)
+    pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
 
-    # n_points = len(anti_sun_lon)
-    # anti_sun_vec = np.vstack([anti_sun_cos, anti_sun_sin, np.zeros(n_points)])
-    # anti_sun_perp_vec = np.vstack([-anti_sun_sin, anti_sun_cos, np.zeros(n_points)])
-    # # print(f"Calculated basis vectors with shape: {anti_sun_vec.shape}")
+    # save map for each day
+    hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))/g.NPIXPERIFG
+    print("Saving hit map for day {:03d}...".format(batch_idx + 1))
+    hp.write_map("../output/hit_maps/fossil/day_{:03d}.fits".format(batch_idx + 1), hit_map,
+                 overwrite=True)
 
-    # # use basis vectors to calculate precession pattern
-    # # generate time arrays again to not use astropy units
-    # t = np.arange(0, batch_size, one_pointing)
-    # times = batch_idx * batch_size + t
+    # plot orbit for each batch
+    earth_coords = [0, 0, 0]
+    # sun_coords = 
 
-    # precession_phase = 2 * np.pi * times / full_sky
-    # spin_phase = 2 * np.pi * speed * times
-
-    # precession_cos = np.cos(precession_phase)
-    # precession_sin = np.sin(precession_phase)
-    # spin_vec = (tilt_cos * anti_sun_vec +
-    #             tilt_sin * (precession_cos * anti_sun_perp_vec + precession_sin * ecl_pole_vec))
-    # # print(f"Calculated spin_vec with shape: {spin_vec.shape}")
-
-    # # generate new basis around the spin vector
-    # spin_perp_vec1 = np.cross(spin_vec, ecl_pole_vec, axis=0)
-    # spin_perp_vec2 = np.cross(spin_vec, spin_perp_vec1, axis=0)
-
-    # # calculate line of sight
-    # spin_cos = np.cos(spin_phase)
-    # spin_sin = np.sin(spin_phase)
-    # los_vec = (los_cos * spin_vec +
-    #            los_sin * (spin_cos * spin_perp_vec1 + spin_sin * spin_perp_vec2))
-
-    # theta, phi = hp.vec2ang(los_vec)
-
-    # print(f"  Completed batch {batch_idx + 1} ({len(theta)} pointings in {time() - t1:.2f}s)")
-    # return theta, phi
+    return pix
 
 # run for full survey  using parallelization
 n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
@@ -269,23 +209,25 @@ print(f"{'='*60}\n")
 
 # Combine results
 print("Combining results from all batches...")
-theta_list, phi_list = zip(*results)
-theta = np.concatenate(theta_list)
-phi = np.concatenate(phi_list)
+pix_list = zip(*results)
+pix = np.concatenate(pix_list)
 
-print(f"Total number of pointings for the whole survey: {len(theta):,}")
-
-print("\nConverting angles to pixel indices...")
-pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
-
+print(f"Total number of pointings for the whole survey: {len(pix):,}")
 print("Creating hit map...")
 hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))/g.NPIXPERIFG
 
 print("Generating and saving plot...")
-hp.mollview(hit_map, title="Hit Map for Fossil Scanning", unit="Hits", norm="hist", max=100)#, coord=["E", "G"])
+hp.mollview(hit_map, title="Hit Map for Fossil Scanning", unit="Hits",coord=["E", "G"])
 plt.savefig("../output/hit_maps/scanning_strategy_fossil.png", bbox_inches="tight")
 plt.close()
-print("Saved hit map to ../output/hit_maps/scanning_strategy_planck.png")
+print("Saved hit map to ../output/hit_maps/scanning_strategy_fossil.png")
+
+# save fits file
+hp.write_map(
+    "../output/hit_maps/scanning_strategy_fossil.fits",
+    hit_map,
+    overwrite=True,
+)
 
 exit()
 
