@@ -27,8 +27,8 @@ from sims.scanning_strategy import generate_scanning_strategy
 warnings.filterwarnings('ignore', category=ErfaWarning)
 
 # instrument parameters
-# survey_len = 4 # years
-survey_len = 30 / 12 # years
+survey_len = 4 # years
+# survey_len = 30 / 12 # years
 survey_time = survey_len * 365.25 * 24 * 3600 # seconds
 
 obs_eff = 0.7
@@ -42,20 +42,19 @@ one_ifg = 3.04 # seconds
 # print(f"Total number of IFGs taken: {n_ifgs}")
 
 one_pointing = one_ifg / g.NPIXPERIFG # seconds
-n_total_pointings = int(survey_time * obs_eff // one_pointing)
 
 # speed = 0.3 # deg/min - planck is 1 rpm
-# speed = speed / 60 # deg/s
-# speed = speed / 360 # rotations per second
-speed = 1 # rpm
-speed = speed / 60 # rps
-spin_rate = 1.00165345964511  # rpm
+# spin_rate = speed / 360 # rpm
+speed = 1 # rph
+spin_rate = speed / 60 # rpm
 
-# spin_axis_tilt = 5 # deg
-spin_axis_tilt = 7.5 # deg
-spin_axis_tilt_rad = np.deg2rad(spin_axis_tilt)
-tilt_cos = np.cos(spin_axis_tilt_rad)
-tilt_sin = np.sin(spin_axis_tilt_rad)
+# spin_rate = 1.00165345964511  # rpm
+
+spin_axis_tilt = 5 # deg
+# spin_axis_tilt = 7.5 # deg
+tilt_angle = np.deg2rad(spin_axis_tilt)
+tilt_cos = np.cos(tilt_angle)
+tilt_sin = np.sin(tilt_angle)
 
 los_angle = 87 # deg
 # los_angle = 85 # deg
@@ -102,7 +101,6 @@ def calculate_batch(batch_idx):
     t_seconds = np.linspace(0, batch_duration_sec, n_pointings_batch, endpoint=False)
     t_coarse = np.arange(0, batch_duration_sec + coarse_step_sec, coarse_step_sec)  
 
-    t1 = time()
     obs_times = start_time + t_coarse * u.s
 
     # Convert datetime to list of datetimes by adding timedeltas
@@ -126,10 +124,10 @@ def calculate_batch(batch_idx):
     c_vec = np.array([0.0, 0.0, 1.0])
 
     # generate basis spin
-    tilt_angle = np.deg2rad(spin_axis_tilt)  # radians
-    six_months = 182.625 * 24 * 3600  # seconds
+    # six_months = 182.625 * 24 * 3600  # seconds
+    hour20 = 20 * 3600  # seconds
     precession_phase = (
-        2 * np.pi * (start_day * 24 * 3600 + t_seconds) / six_months
+        2 * np.pi * (start_day * 24 * 3600 + t_seconds) / hour20
     )  # radians
     s_vec = np.cos(tilt_angle) * a_vec + np.sin(tilt_angle) * (
         np.cos(precession_phase)[:, np.newaxis] * b_vec
@@ -148,13 +146,16 @@ def calculate_batch(batch_idx):
 
     # convert pointing vectors to spherical coordinates
     theta, phi = hp.vec2ang(los_vec)
-    pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
 
-    # save map for each day
-    hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))/g.NPIXPERIFG
-    print("Saving hit map for day {:03d}...".format(batch_idx + 1))
-    hp.write_map("../output/hit_maps/fossil/day_{:03d}.fits".format(batch_idx + 1), hit_map,
-                 overwrite=True)
+    pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
+    print(f"  Finished batch {batch_idx + 1}.")
+    hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    # save hit map for each batch
+    hp.write_map(
+        f"../output/hit_maps/fossil/day_{batch_idx + 1:04d}.fits",
+        hit_map,
+        overwrite=True,
+    )
 
     # plot orbit for each batch
     earth_coords = [0, 0, 0]
@@ -164,7 +165,7 @@ def calculate_batch(batch_idx):
 
 # run for full survey  using parallelization
 n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
-n_workers = min(cpu_count(), n_batches)
+n_workers = min(cpu_count() // 10, n_batches)
 print(f"\n{'='*60}")
 print(f"Starting parallel processing of {n_batches} batches")
 print(f"Using {n_workers} workers (CPU cores available: {cpu_count()})")
@@ -183,8 +184,12 @@ print(f"{'='*60}\n")
 
 # Combine results
 print("Combining results from all batches...")
-pix_list = zip(*results)
-pix = np.concatenate(pix_list)
+# extract pix from results
+pix = np.concatenate(results)
+
+# save all pointings
+np.savez("../output/sim_pointing_fossil.npz", pix=pix)
+print("Saved pointings to ../output/sim_pointing_fossil.npz")
 
 print(f"Total number of pointings for the whole survey: {len(pix):,}")
 print("Creating hit map...")
@@ -228,7 +233,7 @@ if g.PNG:
     )  # , coord=["E", "G"])
     plt.savefig("../output/hit_maps/scanning_strategy_fossil.png", bbox_inches="tight")
     plt.close()
-    print("Saved hit map to ../output/hit_maps/scanning_strategy_planck.png")
+    print("Saved hit map to ../output/hit_maps/scanning_strategy_fossil.png")
 
     hp.mollview(
         hit_map,
