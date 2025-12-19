@@ -1,199 +1,112 @@
-import os
+"""
+Utils for scanning strategy, in particular simulates the scanning strategy for a Planck-like
+satellite in batches.
+"""
 
-import h5py
+import astropy.units as u
 import healpy as hp
-import matplotlib.pyplot as plt
 import numpy as np
+from astropy.coordinates import get_sun
+from astropy.time import Time
 
 import globals as g
 
 
-def generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg, modern):
-    # times each mode takes for a full telemetered interferogram (in seconds)
-    times_onboard = {"ss": 3.04, "ls": 9.88, "sf": 2.04, "lf": 6.59}
-    times_telemetered = {"ss": 55.36, "ls": 44.92, "sf": 39.36, "lf": 31.76}
+def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600, tilt_angle=5,
+                    spin_rate=1/60, los_angle=87, verbose=False):
+    """
+    Get the pointing for one batch.
 
-    if modern:
-        times = times_onboard
-    else:
-        times = times_telemetered
+    Parameters
+    ----------
+    batch_idx : int
+        Index of the batch.
+    batch_duration : int, optional
+        Duration of the batch in days. Default is 1 day.
+    one_ifg : float, optional
+        Time for one interferogram in seconds. Default is 7 seconds.
+    coarse_step_sec : int, optional
+        Coarse time step in seconds for sun position calculation. Default is 600 seconds.
+    tilt_angle : float, optional
+        Tilt angle of the spin axis in degrees. Default is 5 degrees.
+    spin_rate : float, optional
+        Spin rate in revolutions per minute. Default is 1/60 rpm (1 revolution per hour).
+    """
+    print(f"  Starting batch {batch_idx + 1}...")
 
-    speed = 3.5  # degrees per minute
-    speed = speed / 60  # degrees per second
+    # set up times
+    # start time is the start date offset by whiever batch idx we are at
+    start_day = batch_idx * batch_duration
+    start_time_offset = start_day * 24 * 3600 * u.s
+    start_time = Time("2041-01-01T00:00:00") + start_time_offset
 
-    print(f"ecl_lat: {ecl_lat}")
-    print(f"Shape of ecl_lat: {ecl_lat.shape}")
+    batch_duration_sec = batch_duration * 24 * 3600 # seconds
 
-    if npixperifg > 1:
-        ecl_lats = np.zeros((len(ecl_lat), npixperifg))
-        if npixperifg % 2 == 0:
-            for i in range(npixperifg // 2):
-                ecl_lats[:, npixperifg // 2 + i] = (
-                    ecl_lat + speed * times["ss"] * scan * (1 + i * 2) / npixperifg
-                )
-                ecl_lats[:, npixperifg // 2 - (i + 1)] = (
-                    ecl_lat - speed * times["ss"] * scan * (1 + i * 2) / npixperifg
-                )
-        else:
-            ecl_lats[:, npixperifg // 2] = ecl_lat
-            for i in range(1, npixperifg // 2 + 1):
-                ecl_lats[:, npixperifg // 2 + i] = (
-                    ecl_lat + speed * times["ss"] * scan * (i * 2) / npixperifg
-                )
-                ecl_lats[:, npixperifg // 2 - i] = (
-                    ecl_lat - speed * times["ss"] * scan * (i * 2) / npixperifg
-                )
-    elif npixperifg == 1:
-        ecl_lats = ecl_lat
-    else:
-        raise ValueError("npixperifg must be at least 1")
+    # time in seconds, but we want to get one pointing per ifg point
+    # we need it more fine-grained than seconds
+    one_pointing = one_ifg / g.NPIXPERIFG # seconds
+    n_pointings_batch = int(batch_duration_sec / one_pointing)
+    t_seconds = np.linspace(0, batch_duration_sec, n_pointings_batch, endpoint=False)
+    t_coarse = np.arange(0, batch_duration_sec + coarse_step_sec, coarse_step_sec)  
 
-    # print(f"ecl_lats: {ecl_lats}")
-    print(
-        f"Maximum latitude: {np.max(ecl_lats)} and minimum latitude: {np.min(ecl_lats)}"
+    obs_times = start_time + t_coarse * u.s
+
+    # Convert datetime to list of datetimes by adding timedeltas
+    # obs_times = [start_time + timedelta(seconds=float(t)) for t in t_coarse]
+    # get sun positions
+    sun_coords_coarse = get_sun(obs_times).transform_to("geocentrictrueecliptic")
+    anti_sun_lon_coarse = sun_coords_coarse.lon.rad + np.pi  # rad
+
+    # # interpolate
+    cos_interp = np.interp(t_seconds, t_coarse, np.cos(anti_sun_lon_coarse))
+    sin_interp = np.interp(t_seconds, t_coarse, np.sin(anti_sun_lon_coarse))
+    norm = np.sqrt(cos_interp**2 + sin_interp**2)
+    anti_sun_lon = np.arctan2(sin_interp / norm, cos_interp / norm)
+
+    # generate basis for anti-sun coordinate system
+    anti_sun_cos = np.cos(anti_sun_lon)
+    anti_sun_sin = np.sin(anti_sun_lon)
+    a_vec = np.vstack([anti_sun_cos, anti_sun_sin, np.zeros_like(anti_sun_lon)]).T
+    b_vec = np.vstack([-anti_sun_sin, anti_sun_cos, np.zeros_like(anti_sun_lon)]).T
+    c_vec = np.array([0.0, 0.0, 1.0])
+
+    # generate basis spin
+    # six_months = 182.625 * 24 * 3600  # seconds
+    hour20 = 20 * 3600  # seconds
+    tilt_angle_rad = np.deg2rad(tilt_angle)
+    precession_phase = (
+        2 * np.pi * (start_day * 24 * 3600 + t_seconds) / hour20
+    )  # radians
+    s_vec = np.cos(tilt_angle_rad) * a_vec + np.sin(tilt_angle_rad) * (
+        np.cos(precession_phase)[:, np.newaxis] * b_vec
+        + np.sin(precession_phase)[:, np.newaxis] * c_vec
     )
+    u_vec = np.cross(s_vec, c_vec)
+    v_vec = np.cross(s_vec, u_vec)
 
-    for i in range(npixperifg):
-        if i == npixperifg // 2:
-            continue
-        # adjust latitudes to be in the range [-90, 90]
-        ecl_lats[:, i][ecl_lats[:, i] < -90] = (
-            -ecl_lats[:, i][ecl_lats[:, i] < -90] - 180
-        )
-        ecl_lats[:, i][ecl_lats[:, i] > 90] = 180 - ecl_lats[:, i][ecl_lats[:, i] > 90]
+    # calculate line-of-sight vector in ecliptic coordinates
+    spin_phase = (2 * np.pi * spin_rate / 60.0) * (
+        start_day * 24 * 3600 + t_seconds
+    )  # radians
+    spin_cos = np.cos(spin_phase)[:, np.newaxis]
+    spin_sin = np.sin(spin_phase)[:, np.newaxis]
+    los_angle_rad = np.deg2rad(los_angle)
+    los_cos = np.cos(los_angle_rad)
+    los_sin = np.sin(los_angle_rad)
+    los_vec = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
 
-    pix_ecl = np.zeros((len(ecl_lat), npixperifg), dtype=int)
-    if npixperifg > 1:
-        for i in range(npixperifg):
-            pix_ecl[:, i] = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats[:, i], lonlat=True)
-    else:
-        pix_ecl = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lats, lonlat=True)
-    print(f"Shape of pix_ecl: {pix_ecl.shape}")
+    # convert pointing vectors to spherical coordinates
+    theta, phi = hp.vec2ang(los_vec)
 
-    print(f"pix_ecl inside function: {pix_ecl}")
-    return pix_ecl
-
-
-if __name__ == "__main__":
-    user = os.environ["USER"]
-    data_path = f"/mn/stornext/u3/{user}/d5/firas-reanalysis/Commander/commander3/todscripts/firas/data/sky_v4.4.h5"
-
-    sky_data = h5py.File(
-        data_path,
-        "r",
-    )
-
-    mtm_speed = sky_data["df_data"]["mtm_speed"][:]
-    mtm_length = sky_data["df_data"]["mtm_length"][:]
-    ss_filter = (mtm_speed == 0) & (mtm_length == 0)
-
-    ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
-    ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
-    scan = sky_data["df_data"]["scan"][ss_filter]  # up is 1, down is -1
-    # pix_ecl = sky_data["df_data"]["pix_ecl"][:].astype(int)
-
-    pix_ecl_original = hp.ang2pix(g.NSIDE, ecl_lon, ecl_lat, lonlat=True)
-    print(f"pix_ecl from beginning: {pix_ecl_original}")
-
-    # plot original hit map
-    original_hit_map = np.bincount(pix_ecl_original, minlength=g.NPIX).astype(float)
-    mask = original_hit_map == 0
-    original_hit_map[mask] = np.nan
-    if g.PNG:
-        hp.mollview(
-            original_hit_map,
-            title="Original Hit Map",
-            unit="Hits",
-            min=0,
-            max=np.nanmax(original_hit_map),
-            xsize=2000,
-            coord=["E", "G"],
-        )
-        plt.savefig(
-            "../output/hit_maps/original.png", facecolor=None, bbox_inches="tight"
-        )
-        plt.close()
-    if g.FITS:
+    pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
+    print(f"  Finished batch {batch_idx + 1}.")
+    if verbose:
+        hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))
+        # save hit map for each batch
         hp.write_map(
-            "../output/hit_maps/original.fits",
-            original_hit_map,
+            f"../output/hit_maps/fossil/day_{batch_idx + 1:04d}.fits",
+            hit_map,
             overwrite=True,
-            dtype=np.float64,
         )
 
-    # npixperifg = 512
-    # pix_ecl = generate_scanning_strategy(ecl_lat, ecl_lon, scan, npixperifg)
-    # print(f"Shape of pix_ecl: {pix_ecl.shape}")
-
-    # npix = hp.nside2npix(g.NSIDE)
-
-    # # remake hit map
-    # hit_map = np.bincount(pix_ecl[:, npixperifg // 2], minlength=npix)
-    # # hit_map = np.bincount(pix_ecl, minlength=npix)
-    # hp.mollview(
-    #     hit_map,
-    #     title="Hit Map",
-    #     unit="Hits",
-    #     min=0,
-    #     max=hit_map.max(),
-    #     xsize=2000,
-    #     coord=["E", "G"],
-    # )
-    # if g.PNG:
-    #     plt.savefig("../output/hit_maps/remade.png")
-    #     plt.close()
-    # if g.FITS:
-    #     hp.write_map("../output/hit_maps/remade.fits", hit_map, overwrite=True)
-
-    # P = pix_ecl.flatten()
-
-    # # save pointing matrix
-    # # np.save("../input/firas_scanning_strategy.npy", P)
-    # # print("Pointing matrix saved to ../input/firas_scanning_strategy.npy")
-
-    # # plot hit map of the scanning strategy
-    # npix = hp.nside2npix(g.NSIDE)
-    # hit_map_ss = np.bincount(P, minlength=npix) / npixperifg
-
-    # if g.PNG:
-    #     hp.mollview(
-    #         hit_map_ss,
-    #         title="Scanning Strategy Hit Map",
-    #         unit="Hits",
-    #         min=0,
-    #         max=hit_map_ss.max(),
-    #         xsize=2000,
-    #         coord=["E", "G"],
-    #     )
-    #     plt.savefig("../output/hit_maps/scanning_strategy.png")
-    #     plt.close()
-
-    # # compare hit maps
-    # difference_map = original_hit_map - hit_map_ss
-    # if g.PNG:
-    #     hp.mollview(
-    #         difference_map,
-    #         title="Original hit map - Scanning strategy hit map",
-    #         unit="Hits",
-    #         min=-1,
-    #         max=1,
-    #         cmap="RdBu_r",
-    #         coord=["E", "G"],
-    #     )
-    #     plt.savefig("../output/hit_maps/difference.png")
-    #     plt.close()
-    # ratio_map = original_hit_map / hit_map_ss
-    # print("Ratio between original hit map and scanning strategy hit map: ", ratio_map)
-    # # plot ratio map
-    # if g.PNG:
-    #     hp.mollview(
-    #         ratio_map,
-    #         title="Original hit map / Scanning strategy hit map",
-    #         unit="Hits",
-    #         min=0.5,
-    #         max=1.5,
-    #         cmap="RdBu_r",
-    #         coord=["E", "G"],
-    #     )
-    #     plt.savefig("../output/hit_maps/ratio.png")
-    #     plt.close()
+    return pix
