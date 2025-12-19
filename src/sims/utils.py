@@ -34,7 +34,7 @@ def downgrade_map(input_map, nside_out):
     plt.savefig("../output/dust_map_downgraded.png")
     plt.close()
 
-    print("Downgraded map to nside ", nside_out)
+    print("Downgraded map to nside", nside_out)
     return m_ecl.value
 
 
