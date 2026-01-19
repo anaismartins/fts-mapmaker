@@ -1,6 +1,7 @@
 """
 This script generates simulated data for a modern FTS experiment.
-It assumes the same speeds as FIRAS, but without summing up on-board IFGs which are then telemetered, i.e. we assume that on-board = telemetered IFG.
+It assumes the same speeds as FIRAS, but without summing up on-board IFGs which are then
+telemetered, i.e. we assume that on-board = telemetered IFG.
 """
 
 import argparse
@@ -10,12 +11,9 @@ import warnings
 from multiprocessing import Pool, cpu_count
 from time import time
 
-import astropy.units as u
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-# import spiceypy
-from astropy.time import Time
 from erfa import ErfaWarning
 
 import globals as g
@@ -61,20 +59,26 @@ if not os.path.exists("../output/sim_pointing_fossil.npz"):
     # Combine results
     print("Combining results from all batches...")
     # extract pix from results
-    pix_ecl = np.concatenate(results)
+    pix_list, lon_list, lat_list = zip(*results)
+    pix_ecl = np.concatenate(pix_list)
+    ecl_lon = np.concatenate(lon_list)
+    ecl_lat = np.concatenate(lat_list)
 
     # save all pointings
-    np.savez("../output/sim_pointing_fossil.npz", pix=pix_ecl)
+    np.savez("../output/sim_pointing_fossil.npz", pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
     print("Saved pointings to ../output/sim_pointing_fossil.npz")
 else:
     print("Loading existing pointings...")
     pix_ecl = np.load("../output/sim_pointing_fossil.npz")["pix"]
+    ecl_lon = np.load("../output/sim_pointing_fossil.npz")["lon"]
+    ecl_lat = np.load("../output/sim_pointing_fossil.npz")["lat"]
     print("Loaded pointings from ../output/sim_pointing_fossil.npz")
 
 if args.verbose:
     print(f"Total number of pointings for the whole survey: {len(pix_ecl):,}")
     print("Creating hit map...")
-    hit_map = np.bincount(pix_ecl, minlength=hp.nside2npix(g.NSIDE["fossil"]))/g.NPIXPERIFG
+    hit_map = np.bincount(pix_ecl, minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    hit_map = hit_map / g.NPIXPERIFG["fossil"]
 
     print("Generating and saving plot...")
     hp.mollview(hit_map, title="Hit Map for Fossil Scanning", unit="Hits",coord=["E", "G"])
@@ -103,28 +107,32 @@ ifg = ifg.real
 
 print(f"shape of pix_ecl: {pix_ecl.shape}")
 # divide pix_ecl into the different ifgs
-rest = len(pix_ecl) % g.NPIXPERIFG
-pix_ecl = np.array(np.split(pix_ecl[:-rest], g.NPIXPERIFG)).T
+rest = len(pix_ecl) % g.NPIXPERIFG["fossil"]
+print(f"rest: {rest}")
+pix_ecl = np.array(np.split(pix_ecl[:-rest], g.NPIXPERIFG["fossil"])).T
 print(f"shape of pix_ecl after reshaping: {pix_ecl.shape}")
 
 # now we frankenstein the IFGs together
 ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE))
-for i in range(g.NPIXPERIFG):
+for i in range(g.NPIXPERIFG["fossil"]):
     for pix_i, pix in enumerate(pix_ecl[:, i]):
         ifg_scanning[pix_i, i] = ifg[pix, i]
 
 print(f"Shape of ifg_scanning: {ifg_scanning.shape}")
 
 n = random.randint(0, ifg_scanning.shape[0])
+
+print(f"Plotting IFG {n}...")
+
 plt.plot(ifg_scanning[n])
 plt.title(f"IFG {n}")
 plt.ylabel("Interferogram")
-plt.savefig(f"../output/sim_ifgs_modern/{n}.png")
+plt.savefig(f"../output/sims/ifgs_modern/{n}.png")
 plt.close()
 
 # plot pixels hit on a map
 print(f"Pixels hit: {np.unique(pix_ecl[n])}")
-npix = hp.nside2npix(g.NSIDE)
+npix = hp.nside2npix(g.NSIDE["fossil"])
 map_pix = np.bincount(pix_ecl[n], minlength=npix)
 hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds")
 hp.projplot(
@@ -135,7 +143,7 @@ hp.projplot(
     lonlat=True,
     marker="x",
 )
-plt.savefig(f"../output/pix_hits/{n}.png")
+plt.savefig(f"../output/pix_hits/fossil_{n}.png")
 
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0])
