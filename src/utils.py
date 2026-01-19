@@ -59,7 +59,7 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
     return s_d
 
 
-def generate_frequencies(channel='ll', mode='ss', nfreq=257):
+def generate_frequencies(channel='ll', mode='ss', nfreq=None):
     """
     Generates an array with the frequencies in GHz for the given channel and mode.
 
@@ -110,9 +110,19 @@ def generate_frequencies(channel='ll', mode='ss', nfreq=257):
             raise ValueError("Invalid channel and mode combination")
     elif g.SIM_TYPE == "fossil":
         dnu = 15.0 # GHz
-        nu0 = 30.0 # GHz
 
-        f_ghz = np.arange(nu0, 2000, dnu)
+        if nfreq == None:
+            nu0 = 60.0 # GHz
+            f_ghz = np.arange(nu0, 2000, dnu)
+
+        elif nfreq == 129: # 134 * 2 = 268 
+            nu0 = 0.0
+            f_ghz = np.linspace(nu0, dnu * (nfreq - 1), nfreq)
+            print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz")
+
+        else:
+            raise ValueError("For 'fossil' SIM_TYPE, nfreq must be 128 or None")
+        
     else:
         raise ValueError("SIM_TYPE must be either 'firas' or 'fossil'")
 
@@ -142,4 +152,4 @@ def save_maps(freq, m):
 
 if __name__ == "__main__":
     # test generate_frequencies
-    f_ghz = generate_frequencies()
+    f_ghz = generate_frequencies(nfreq=129)

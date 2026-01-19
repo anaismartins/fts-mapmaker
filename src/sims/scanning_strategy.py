@@ -44,7 +44,7 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
 
     # time in seconds, but we want to get one pointing per ifg point
     # we need it more fine-grained than seconds
-    one_pointing = one_ifg / g.NPIXPERIFG # seconds
+    one_pointing = one_ifg / g.NPIXPERIFG["fossil"] # seconds
     n_pointings_batch = int(batch_duration_sec / one_pointing)
     t_seconds = np.linspace(0, batch_duration_sec, n_pointings_batch, endpoint=False)
     t_coarse = np.arange(0, batch_duration_sec + coarse_step_sec, coarse_step_sec)  
@@ -96,9 +96,9 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
     los_vec = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
 
     # convert pointing vectors to spherical coordinates
-    theta, phi = hp.vec2ang(los_vec)
+    lon, lat = hp.vec2ang(los_vec, True)
 
-    pix = hp.ang2pix(g.NSIDE["fossil"], theta, phi)
+    pix = hp.ang2pix(g.NSIDE["fossil"], lon, lat, lonlat=True)
     print(f"  Finished batch {batch_idx + 1}.")
     if verbose:
         hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))
@@ -109,4 +109,4 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
             overwrite=True,
         )
 
-    return pix
+    return pix, lon, lat

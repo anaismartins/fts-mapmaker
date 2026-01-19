@@ -15,7 +15,9 @@ NSIDE["firas"] = 32
 SIM_TYPE = "fossil"  # "fossil" or "firas"
 
 NPIX = 12 * NSIDE[SIM_TYPE]**2
-NPIXPERIFG = 512
+NPIXPERIFG = {}
+NPIXPERIFG["fossil"] = 256
+NPIXPERIFG["firas"] = 512
 N_IFGS = 16
 
 NOISE = "only white"  # "only white" or "1f"
