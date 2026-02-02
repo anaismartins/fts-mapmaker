@@ -8,19 +8,24 @@ import sys
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.io import fits
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 import globals as g
-import utils
+
+if g.SIM_TYPE == "fossil":
+    ref_freq = 540
+elif g.SIM_TYPE == "firas":
+    ref_freq = 544
+else:
+    raise ValueError("g.SIM_TYPE must be 'fossil' or 'firas'")
 
 # plot simulated 545 map
-simulated_map = hp.read_map("../output/dust_maps/0544.fits")
+simulated_map = hp.read_map(f"../output/dust_maps/{g.SIM_TYPE}/{ref_freq:04d}.fits")
 hp.mollview(
     simulated_map,
-    title="Simulated 545 GHz map",
+    title=f"Simulated {ref_freq} GHz map",
     unit="MJy/sr",
     min=0,
     max=50,
@@ -30,8 +35,9 @@ hp.graticule()
 plt.savefig("../output/compare/simulated_map.png")
 plt.close()
 
+
 # compare naive mapmaker with maps made from the sed
-binned_mapmaker = hp.read_map(f"../output/binned_mapmaker/{g.SIM_TYPE}/0544.fits")
+binned_mapmaker = hp.read_map(f"../output/binned_mapmaker/{g.SIM_TYPE}/{ref_freq:04d}.fits")
 hp.mollview(
     binned_mapmaker,
     title=f"Binned mapmaker ({g.SIM_TYPE})",

@@ -6,8 +6,8 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sims.naive import sim_dust
-from src.globals import FITS, PNG
+import globals as g
+from sims.utils import sim_dust
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -30,14 +30,14 @@ def plot_ifgs(ifg):
 
 def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
     # clean previous maps
-    for file in os.listdir("../output/dust_maps"):
-        os.remove(f"../output/dust_maps/{file}")
+    for file in os.listdir(f"../output/dust_maps/{g.SIM_TYPE}"):
+        os.remove(f"../output/dust_maps/{g.SIM_TYPE}/{file}")
     # plot map for each frequency
     dust_map = dust_map_downgraded_mjy[:, np.newaxis] * signal[np.newaxis, :]
     for i, frequency in enumerate(frequencies):
         logging.info(f"Plotting dust map for frequency {i}")
         # dust_map = dust_map_downgraded_mjy * signal[i]
-        if PNG:
+        if g.PNG:
             hp.mollview(
                 dust_map[:, i],
                 title=f"{int(frequency):04d} GHz",
@@ -47,14 +47,14 @@ def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
                 coord=["E", "G"],
             )
             try:
-                plt.savefig(f"../output/dust_maps/{int(frequency):04d}.png")
+                plt.savefig(f"../output/dust_maps/{g.SIM_TYPE}/{int(frequency):04d}.png")
                 plt.close()
             except Exception as e:
                 logging.error(
                     f"Failed to save plot for frequency {int(frequency):04d}: {e}"
                 )
-        if FITS:
-            output_file = f"../output/dust_maps/{int(frequency):04d}.fits"
+        if g.FITS:
+            output_file = f"../output/dust_maps/{g.SIM_TYPE}/{int(frequency):04d}.fits"
             if os.path.exists(output_file):
                 logging.warning(f"Overwriting existing file: {output_file}")
             hp.write_map(output_file, dust_map[:, i], overwrite=True)
@@ -69,7 +69,7 @@ def plot_m_invert(frequencies):
     m = np.load("./test_output/m_invert.npz")["m"]
     # remove monopole
 
-    if PNG:
+    if g.PNG:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
             hp.mollview(
@@ -81,7 +81,7 @@ def plot_m_invert(frequencies):
             )
             plt.savefig(f"./test_output/m_invert/{int(frequencies.value[i]):04d}.png")
             plt.close()
-    if FITS:
+    if g.FITS:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
             hp.write_map(
@@ -101,7 +101,7 @@ def plot_m_cg_per_tod(frequencies):
 
     m = np.load("./test_output/cg_per_tod.npz")["m"]
 
-    if PNG:
+    if g.PNG:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
             hp.mollview(
@@ -115,7 +115,7 @@ def plot_m_cg_per_tod(frequencies):
                 f"./test_output/m_cg_per_tod/{int(frequencies.value[i]):04d}.png"
             )
             plt.close()
-    if FITS:
+    if g.FITS:
         for i in range(m.shape[1]):
             # print(f"Plotting m for frequency {i}")
             hp.write_map(
