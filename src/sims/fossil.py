@@ -36,10 +36,10 @@ survey_time = survey_len * 365.25 * 24 * 3600 # seconds
 obs_eff = 0.7
 
 
-if not os.path.exists("../output/sim_pointing_fossil.npz"):
+if not os.path.exists("../output/data/sim_pointing_fossil.npz"):
     # run for full survey  using parallelization
     n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
-    n_workers = min(cpu_count() // 10, n_batches)
+    n_workers = min(cpu_count() // 8, n_batches)
     print(f"\n{'='*60}")
     print(f"Starting parallel processing of {n_batches} batches")
     print(f"Using {n_workers} workers (CPU cores available: {cpu_count()})")
@@ -64,21 +64,23 @@ if not os.path.exists("../output/sim_pointing_fossil.npz"):
     ecl_lon = np.concatenate(lon_list)
     ecl_lat = np.concatenate(lat_list)
 
+    print("Shapes gotten from simulation:")
+    print(f"pix {pix_ecl.shape}, lon {ecl_lon.shape}, lat {ecl_lat.shape}")
+
     # save all pointings
-    np.savez("../output/sim_pointing_fossil.npz", pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
-    print("Saved pointings to ../output/sim_pointing_fossil.npz")
+    np.savez("../output/data/sim_pointing_fossil.npz", pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
+    print("Saved pointings to ../output/data/sim_pointing_fossil.npz")
 else:
     print("Loading existing pointings...")
-    pix_ecl = np.load("../output/sim_pointing_fossil.npz")["pix"]
-    ecl_lon = np.load("../output/sim_pointing_fossil.npz")["lon"]
-    ecl_lat = np.load("../output/sim_pointing_fossil.npz")["lat"]
-    print("Loaded pointings from ../output/sim_pointing_fossil.npz")
+    pix_ecl = np.load("../output/data/sim_pointing_fossil.npz")["pix"]
+    ecl_lon = np.load("../output/data/sim_pointing_fossil.npz")["lon"]
+    ecl_lat = np.load("../output/data/sim_pointing_fossil.npz")["lat"]
+    print("Loaded pointings from ../output/data/sim_pointing_fossil.npz")
 
 if args.verbose:
     print(f"Total number of pointings for the whole survey: {len(pix_ecl):,}")
     print("Creating hit map...")
-    hit_map = np.bincount(pix_ecl, minlength=hp.nside2npix(g.NSIDE["fossil"]))
-    hit_map = hit_map / g.NPIXPERIFG["fossil"]
+    hit_map = np.bincount(pix_ecl.flatten(), minlength=hp.nside2npix(g.NSIDE["fossil"]))
 
     print("Generating and saving plot...")
     hp.mollview(hit_map, title="Hit Map for Fossil Scanning", unit="Hits",coord=["E", "G"])
@@ -99,26 +101,21 @@ sed = np.nan_to_num(sed)
 
 print("Generating interferograms...")
 spec = dust_map_downgraded_mjy[:, np.newaxis] * sed[np.newaxis, :]
-print(f"Shape of spec: {spec.shape}")
+print(f"Generated spectral cube with shape {spec.shape}")
 
 ifg = np.fft.irfft(spec, axis=1)
-ifg = np.roll(ifg, 360, axis=1)
+ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
 
-print(f"shape of pix_ecl: {pix_ecl.shape}")
-# divide pix_ecl into the different ifgs
-rest = len(pix_ecl) % g.NPIXPERIFG["fossil"]
-print(f"rest: {rest}")
-pix_ecl = np.array(np.split(pix_ecl[:-rest], g.NPIXPERIFG["fossil"])).T
-print(f"shape of pix_ecl after reshaping: {pix_ecl.shape}")
+print("Generated interferogram cube.")
 
 # now we frankenstein the IFGs together
-ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE))
+ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE["fossil"]))
 for i in range(g.NPIXPERIFG["fossil"]):
     for pix_i, pix in enumerate(pix_ecl[:, i]):
         ifg_scanning[pix_i, i] = ifg[pix, i]
 
-print(f"Shape of ifg_scanning: {ifg_scanning.shape}")
+print(f"Frankensteined IFGs together with shape {ifg_scanning.shape}.")
 
 n = random.randint(0, ifg_scanning.shape[0])
 
@@ -144,6 +141,7 @@ hp.projplot(
     marker="x",
 )
 plt.savefig(f"../output/pix_hits/fossil_{n}.png")
+plt.close()
 
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0])
@@ -151,5 +149,5 @@ noise, sigma = sims.white_noise(ifg_scanning.shape[0])
 ifg_scanning = ifg_scanning + noise
 print(f"Shape of noise: {noise.shape} and shape of sigma: {sigma.shape}")
 
-np.savez("../output/ifgs_modern.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
+np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")

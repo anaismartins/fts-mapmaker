@@ -1,5 +1,11 @@
-IFG_SIZE = 512
-SPEC_SIZE = 257
+IFG_SIZE = {}
+SPEC_SIZE = {}
+
+IFG_SIZE["fossil"] = 256
+SPEC_SIZE["fossil"] = 129
+
+IFG_SIZE["firas"] = 512
+SPEC_SIZE["firas"] = 257
 
 PNG = True
 FITS = True

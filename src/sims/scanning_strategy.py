@@ -3,16 +3,26 @@ Utils for scanning strategy, in particular simulates the scanning strategy for a
 satellite in batches.
 """
 
+import warnings
+
 import astropy.units as u
 import healpy as hp
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.coordinates import get_sun
 from astropy.time import Time
+from erfa import ErfaWarning
 
 import globals as g
 
+# Suppress ERFA warnings about dubious year for future dates
+warnings.filterwarnings('ignore', category=ErfaWarning)
 
-def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600, tilt_angle=5,
+
+def calculate_batch(batch_idx, 
+                    #batch_duration=1,
+                    num_ifgs=12343,
+                    one_ifg=7, coarse_step_sec=600, tilt_angle=5,
                     spin_rate=1/60, los_angle=87, verbose=False):
     """
     Get the pointing for one batch.
@@ -21,8 +31,10 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
     ----------
     batch_idx : int
         Index of the batch.
-    batch_duration : int, optional
+    batch_duration : int, optional (DEPRECATED)
         Duration of the batch in days. Default is 1 day.
+    num_ifgs : int, optional
+        Number of interferograms in the batch. Default is 12343 IFGs (1 day worth).
     one_ifg : float, optional
         Time for one interferogram in seconds. Default is 7 seconds.
     coarse_step_sec : int, optional
@@ -36,11 +48,14 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
 
     # set up times
     # start time is the start date offset by whiever batch idx we are at
-    start_day = batch_idx * batch_duration
+    # start_day = batch_idx * batch_duration
+    start_ifgs = batch_idx * num_ifgs
+    start_day = (start_ifgs * one_ifg) / (24 * 3600)  # days
     start_time_offset = start_day * 24 * 3600 * u.s
     start_time = Time("2041-01-01T00:00:00") + start_time_offset
 
-    batch_duration_sec = batch_duration * 24 * 3600 # seconds
+    # batch_duration_sec = batch_duration * 24 * 3600 # seconds
+    batch_duration_sec = num_ifgs * one_ifg
 
     # time in seconds, but we want to get one pointing per ifg point
     # we need it more fine-grained than seconds
@@ -109,4 +124,43 @@ def calculate_batch(batch_idx, batch_duration=1, one_ifg=7, coarse_step_sec=600,
             overwrite=True,
         )
 
+    # split pix, lon, lat into chunks of size num_ifgs
+    pix = np.array(np.split(pix, num_ifgs))
+    lon = np.array(np.split(lon, num_ifgs))
+    lat = np.array(np.split(lat, num_ifgs))
+
     return pix, lon, lat
+
+
+if __name__ == "__main__":
+    # test splitting into IFGs and generating hit map
+    pix, lon, lat = calculate_batch(0, verbose=True)
+    print(f"Shape of pix: {pix.shape}, lon: {lon.shape}, lat: {lat.shape}")
+
+    # plot hit map of just one IFG
+    hit_map = np.bincount(pix[0], minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    hp.mollview(
+        hit_map,
+        title="Scanning Strategy Hit Map - One IFG",
+        unit="Hits",
+        min=0,
+        max=hit_map.max(),
+        xsize=2000,
+        coord=["E", "G"],
+    )
+    plt.savefig("../output/hit_maps/one_ifg.png")
+    plt.close()
+
+    # plot ten first IFGs
+    hit_map = np.bincount(pix[:10].flatten(), minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    hp.mollview(
+        hit_map,
+        title="Scanning Strategy Hit Map - First 10 IFGs",
+        unit="Hits",
+        min=0,
+        max=hit_map.max(),
+        xsize=2000,
+        coord=["E", "G"],
+    )
+    plt.savefig("../output/hit_maps/first_10_ifgs.png")
+    plt.close()

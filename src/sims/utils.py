@@ -52,7 +52,12 @@ def sim_dust():
     T_d = 21 * u.K
     beta_d = 1.53
 
-    frequencies = utils.generate_frequencies()
+    if g.SIM_TYPE == "firas":
+        frequencies = utils.generate_frequencies()
+    elif g.SIM_TYPE == "fossil":
+        frequencies = utils.generate_frequencies(nfreq=129)
+    else:
+        raise ValueError("g.SIM_TYPE must be 'firas' or 'fossil'")
 
     signal = utils.dust(frequencies * u.GHz, A_d, nu0_dust, beta_d, T_d).value
     # check for invalid value encountered in divide
@@ -89,9 +94,9 @@ def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
     """
     sigmarand = np.random.uniform(sigma_min, sigma_max, (ntod))
     if ifg:
-        size = g.IFG_SIZE
+        size = g.IFG_SIZE[g.SIM_TYPE]
     else:
-        size = g.SPEC_SIZE
+        size = g.SPEC_SIZE[g.SIM_TYPE]
     noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, size))
 
     # save noise in a npz file
