@@ -50,7 +50,7 @@ if g.PNG:
 
 frequencies = utils.generate_frequencies(nfreq=129)
 
-m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
+m_ifg = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
 data_density = np.zeros((g.NPIX), dtype=float)
 
 for i in range(pix.shape[0]):
