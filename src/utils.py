@@ -121,7 +121,7 @@ def generate_frequencies(channel='ll', mode='ss', nfreq=None):
             print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz")
 
         else:
-            raise ValueError("For 'fossil' SIM_TYPE, nfreq must be 128 or None")
+            raise ValueError("For 'fossil' SIM_TYPE, nfreq must be 129 or None")
         
     else:
         raise ValueError("SIM_TYPE must be either 'firas' or 'fossil'")

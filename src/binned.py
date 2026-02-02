@@ -12,8 +12,11 @@ import globals as g
 import utils
 
 data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
+print("Loaded IFG data from disk.")
+
 ifgs = data["ifg"]
 pix = data["pix"]
+print("Separated data into IFGs and pointing.")
 
 if g.SIM_TYPE == "firas":
     ifgs = ifgs / g.N_IFGS
@@ -21,12 +24,12 @@ if g.SIM_TYPE == "firas":
 print(f"Shape of ifgs: {ifgs.shape} and shape of pix: {pix.shape}")
 
 # use only the middle pixel
-if g.SIM_TYPE == "modern":
-    pix = pix[:, g.NPIXPERIFG // 2]
+if g.SIM_TYPE == "fossil":
+    pix = pix[:, g.NPIXPERIFG[g.SIM_TYPE] // 2]
 elif g.SIM_TYPE == "firas":
-    pix = pix[g.N_IFGS // 2, :, g.NPIXPERIFG // 2]
+    pix = pix[g.N_IFGS // 2, :, g.NPIXPERIFG[g.SIM_TYPE] // 2]
 else:
-    raise ValueError("g.SIM_TYPE must be 'modern' or 'firas'")
+    raise ValueError("g.SIM_TYPE must be 'fossil' or 'firas'")
 
 # plot hit map of the scanning strategy
 hit_map = np.bincount(pix, minlength=g.NPIX).astype(float)
@@ -45,7 +48,7 @@ if g.PNG:
     plt.savefig("../output/hit_maps/middle_pixel.png")
     plt.close()
 
-frequencies = utils.generate_frequencies("ll", "ss", 257)
+frequencies = utils.generate_frequencies(nfreq=129)
 
 m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
 data_density = np.zeros((g.NPIX), dtype=float)
