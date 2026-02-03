@@ -80,7 +80,7 @@ hp.graticule()
 plt.savefig(f"../output/compare/ratio_maps/{g.SIM_TYPE}/binned.png")
 plt.close()
 
-white_noise_map = hp.read_map(f"../output/white_noise_mapmaker/{g.SIM_TYPE}/0544.fits")
+white_noise_map = hp.read_map(f"../output/white_noise_mapmaker/{g.SIM_TYPE}/maps/{ref_freq:04d}.fits")
 hp.mollview(
     white_noise_map,
     title=f"White noise mapmaker ({g.SIM_TYPE})",
