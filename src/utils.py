@@ -76,15 +76,16 @@ def generate_frequencies(channel='ll', mode='ss', nfreq=None):
         An array with the frequencies in GHz.
     """
 
-    # check if channel is str or int
-    if isinstance(channel, int):
-        channel_str = list(channels.keys())[list(channels.values()).index(channel)]
-    elif isinstance(channel, str):
-        channel_str = channel
-    else:
-        raise ValueError("Channel must be either int or str")
-
     if g.SIM_TYPE == "firas":
+        # check if channel is str or int
+        if isinstance(channel, int):
+            channel_str = list(channels.keys())[list(channels.values()).index(channel)]
+        elif isinstance(channel, str):
+            channel_str = channel
+        else:
+            raise ValueError("Channel must be either int or str")
+
+
         nu0 = {"ss": 68.020812, "lf": 23.807283}
         dnu = {"ss": 13.604162, "lf": 3.4010405}
         nf = {

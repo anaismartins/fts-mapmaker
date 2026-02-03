@@ -41,14 +41,14 @@ if __name__ == "__main__":
     unique_pixels = np.unique(pix)
     print(f"Number of unique pixels in P: {len(unique_pixels)} out of {g.NPIX}")
 
-    numerator = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
-    denominator = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
+    numerator = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
+    denominator = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
     # Vectorized accumulation: loop over IFG sample index (usually much smaller
     # than the number of IFGs) and use np.bincount to accumulate values per pixel.
     # This avoids the expensive Python-level loop over all IFGs and is much faster.
     weights = 1.0 / (sigma**2)
-    if g.SIM_TYPE == "modern":
-        for x_i in range(g.IFG_SIZE):
+    if g.SIM_TYPE == "fossil":
+        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
             pix_s = pix[:, x_i]
             vals = ifgs[:, x_i] * weights
             # bincount returns length npix; fill the column x_i for numerator/denominator
@@ -67,6 +67,9 @@ if __name__ == "__main__":
                 denominator[:, x_i] += np.bincount(
                     pix_s, weights=weights, minlength=g.NPIX
                 )
+    else:
+        raise ValueError(f"Unknown SIM_TYPE: {g.SIM_TYPE}")
+    
     print(
         f"Numerator and denominator calculated. Shape of numerator: {numerator.shape} and shape of denominator: {denominator.shape}"
     )
@@ -88,29 +91,39 @@ if __name__ == "__main__":
         min=0,
         max=200,
     )
-    plt.show()
-    m_ifg = np.zeros((g.NPIX, g.IFG_SIZE), dtype=float)
+    plt.savefig("../output/white_noise_mapmaker/fossil/denominator.png")
+    # check if denominator is all zeros
+    print(f"Number of zeros in denominator: {np.sum(denominator == 0)}")
+
+    m_ifg = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
     m_ifg[~mask] = numerator[~mask] / denominator[~mask]
     m_ifg[mask] = np.nan
     print("Divided")
+
+    # check if m_ifg has any nans
+    print(f"Number of NaNs in m_ifg: {np.isnan(m_ifg).sum()}")
 
     m = np.abs(np.fft.rfft(m_ifg, axis=1))
     phase = np.angle(np.fft.rfft(m_ifg, axis=1))
 
     print("Plotting maps")
 
-    frequencies = utils.generate_frequencies("ll", "ss", 257)
+    if g.SIM_TYPE == "fossil":
+        nfreq = 129
+    elif g.SIM_TYPE == "firas":
+        nfreq = 257
+    frequencies = utils.generate_frequencies(nfreq=nfreq)
     # save m as maps
     for nui, freq in enumerate(frequencies):
         if g.FITS:
             hp.write_map(
-                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.fits",
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/maps/{int(freq):04d}.fits",
                 m[:, nui],
                 overwrite=True,
                 dtype=np.float64,
             )
             hp.write_map(
-                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_{int(freq):04d}.fits",
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_maps/{int(freq):04d}.fits",
                 phase[:, nui],
                 overwrite=True,
                 dtype=np.float64,
@@ -126,7 +139,7 @@ if __name__ == "__main__":
                 coord=["E", "G"],
             )
             plt.savefig(
-                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/{int(freq):04d}.png"
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/maps/{int(freq):04d}.png"
             )
             plt.close()
             hp.mollview(
@@ -139,6 +152,6 @@ if __name__ == "__main__":
                 coord=["E", "G"],
             )
             plt.savefig(
-                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_{int(freq):04d}.png"
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/phase_maps/{int(freq):04d}.png"
             )
             plt.close()
