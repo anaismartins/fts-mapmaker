@@ -59,7 +59,7 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
     return s_d
 
 
-def generate_frequencies(channel='ll', mode='ss', nfreq=None):
+def generate_frequencies(simtype, channel='ll', mode='ss', nfreq=None):
     """
     Generates an array with the frequencies in GHz for the given channel and mode.
 
@@ -76,7 +76,7 @@ def generate_frequencies(channel='ll', mode='ss', nfreq=None):
         An array with the frequencies in GHz.
     """
 
-    if g.SIM_TYPE == "firas":
+    if simtype == "firas":
         # check if channel is str or int
         if isinstance(channel, int):
             channel_str = list(channels.keys())[list(channels.values()).index(channel)]
@@ -109,7 +109,7 @@ def generate_frequencies(channel='ll', mode='ss', nfreq=None):
                 f_ghz = np.linspace(0, dnu[mode] * (nfreq - 1), nfreq)
         else:
             raise ValueError("Invalid channel and mode combination")
-    elif g.SIM_TYPE == "fossil":
+    elif simtype == "fossil":
         dnu = 15.0 # GHz
 
         if nfreq == None:
