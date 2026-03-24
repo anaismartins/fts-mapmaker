@@ -134,6 +134,7 @@ hp.mollview(
 hp.graticule()
 plt.savefig(f"../output/compare/cg_mapmaker_{g.SIM_TYPE}.png")
 plt.close()
+
 difference_map = simulated_map - cg_mapmaker
 hp.mollview(
     difference_map,
