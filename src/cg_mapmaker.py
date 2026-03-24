@@ -43,14 +43,14 @@ def calculate_b(d, pointing, sigma):
     b = np.zeros(
         (
             g.NPIX,
-            g.IFG_SIZE,
+            g.IFG_SIZE[g.SIM_TYPE],
         ),
         dtype=complex,
     )
     for pix_i in range(d.shape[0]):
         for x_i in range(d.shape[1]):
-            b[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += N_inv_d[
-                pix_i * g.IFG_SIZE + x_i
+            b[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += N_inv_d[
+                pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i
             ]
 
     return b.flatten()
@@ -75,12 +75,12 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX):
         The result of the matrix-vector product A x.
     """
 
-    x = x.reshape((npix, g.IFG_SIZE))
+    x = x.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
 
-    Px = np.zeros((pointing.shape[0] // g.IFG_SIZE, g.IFG_SIZE), dtype=complex)
-    for pix_i in range(pointing.shape[0] // g.IFG_SIZE):
-        for x_i in range(g.IFG_SIZE):
-            Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE + x_i], x_i]
+    Px = np.zeros((pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]), dtype=complex)
+    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
+        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
+            Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i]
 
     # FPx = np.fft.rfft(Px, axis=1).flatten()
     # N_inv_Px = (FPx / sigma**2).reshape((Px.shape[0], g.SPEC_SIZE))
@@ -88,11 +88,11 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX):
 
     # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
-    A_x = np.zeros((npix, g.IFG_SIZE), dtype=complex)
-    for pix_i in range(pointing.shape[0] // g.IFG_SIZE):
-        for x_i in range(g.IFG_SIZE):
-            A_x[pointing[pix_i * g.IFG_SIZE + x_i], x_i] += N_inv_Px[
-                pix_i * g.IFG_SIZE + x_i
+    A_x = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=complex)
+    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
+        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
+            A_x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += N_inv_Px[
+                pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i
             ]
 
     return A_x.flatten()
@@ -165,10 +165,13 @@ def preconditioned_conjugate_gradient(
         if delta_new < tol**2 * delta0:
             break
 
-        y = x.reshape((npix, g.IFG_SIZE))
+        print(f"DEBUG: npix: {npix} and IFG_SIZE: {g.IFG_SIZE[g.SIM_TYPE]}")            
+        y = x.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
         m = np.abs(np.fft.rfft(y, axis=1))
 
-        r2 = r.reshape((npix, g.IFG_SIZE))
+        r2 = r.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
+
+        print(f"Plotting intermediate results for iteration {i}...")
 
         hp.mollview(
             m[:, 100],
@@ -183,7 +186,7 @@ def preconditioned_conjugate_gradient(
 
         hp.mollview(
             y[:, 100],
-            title=f"IFG map at distance index 100 for iteration {i}",
+            title=f"IFG map at distance index 100 for iteration {i:04d}",
             unit="Amplitude",
             coord=["E", "G"],
         )
@@ -228,11 +231,14 @@ if __name__ == "__main__":
     print(f"shape of pix after flatten: {pix.shape}")
 
     print(f"shape of sigma before flatten: {sigma.shape}")
-    if g.SIM_TYPE == "modern":
-        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE)).flatten()
+    if g.SIM_TYPE == "fossil":
+        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE[g.SIM_TYPE])).flatten()
     elif g.SIM_TYPE == "firas":
-        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE, g.N_IFGS))).flatten()
+        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE[g.SIM_TYPE], g.N_IFGS))).flatten()
+    else:
+        raise ValueError("Unknown SIM_TYPE")
     print(f"shape of sigma after flatten: {sigma.shape}")
+        
 
     plt.vlines(
         512 * np.arange(10),
@@ -258,32 +264,48 @@ if __name__ == "__main__":
     print(f"Starting conjugate gradient solver...")
 
     # set M to be the hits map
-    hits_map = np.zeros((g.NPIX, g.IFG_SIZE))
-    for pix_i in range(pix.shape[0] // g.IFG_SIZE):
-        for x_i in range(g.IFG_SIZE):
-            hits_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += 1
+    print("NPIX: ", g.NPIX)
+    hits_map = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
+        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
+            hits_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += 1
     hits_map = hits_map.flatten()
 
-    rms_map = np.zeros((g.NPIX, g.IFG_SIZE))
-    for pix_i in range(pix.shape[0] // g.IFG_SIZE):
-        for x_i in range(g.IFG_SIZE):
-            rms_map[pix[pix_i * g.IFG_SIZE + x_i], x_i] += (
-                1 / sigma[pix_i * g.IFG_SIZE + x_i] ** 2
+    rms_map = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
+        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
+            rms_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += (
+                1 / sigma[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i] ** 2
             )
     rms_map = np.sqrt(rms_map.flatten())
 
+    x0 = np.zeros_like(b)
+    for i in range(g.IFG_SIZE[g.SIM_TYPE]):
+        # TODO: ADD HERE X0 FROM WHITE NOISE MAPMAKER SOLUTION FOR IFG MAP CUBE BEFORE FFT
+        x0[g.NPIX * i : g.NPIX * (i + 1)] = hp.read_map(
+            f"../output/white_noise_mapmaker/{g.SIM_TYPE}/ifg_maps/ifg_{i:04d}.fits"
+        )
+
     # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
     x = preconditioned_conjugate_gradient(
-        b, pix, sigma, rms_map, save_path="../output/cg/"
+        b, pix, sigma, rms_map, x=x0, save_path="../output/cg/"
     )
 
-    x = x.reshape((g.NPIX, g.IFG_SIZE))
+    x = x.reshape((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
     m = np.abs(np.fft.rfft(x, axis=1))
     t2 = time.time()
     print(f"Finished CG mapmaking in {int((t2 - t1)/60)} minutes.")
     print("Finished CG mapmaking, saving to disk...")
 
-    frequencies = utils.generate_frequencies("ll", "ss", 257)
+    # use the solution of the white noise mapmaker as x0
+    if g.SIM_TYPE == "fossil":
+        nfreq = 129
+    elif g.SIM_TYPE == "firas":
+        nfreq = 257
+    else:
+        raise ValueError("Unknown SIM_TYPE")
+    frequencies = utils.generate_frequencies(nfreq=nfreq)
+
     t1 = time.time()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []

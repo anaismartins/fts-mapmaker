@@ -103,6 +103,27 @@ if __name__ == "__main__":
     # check if m_ifg has any nans
     print(f"Number of NaNs in m_ifg: {np.isnan(m_ifg).sum()}")
 
+    # save the ifg maps
+    for i in range(g.IFG_SIZE[g.SIM_TYPE]):
+        if g.FITS:
+            hp.write_map(
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/ifg_maps/ifg_{i:04d}.fits",
+                m_ifg[:, i],
+                overwrite=True,
+                dtype=np.float64,
+            )
+        if g.PNG:
+            hp.mollview(
+                m_ifg[:, i],
+                title=f"IFG map at point index {i:04d}",
+                unit="Amplitude",
+                coord=["E", "G"],
+            )
+            plt.savefig(
+                f"./../output/white_noise_mapmaker/{g.SIM_TYPE}/ifg_maps/ifg_{i:04d}.png"
+            )
+            plt.close()
+
     m = np.abs(np.fft.rfft(m_ifg, axis=1))
     phase = np.angle(np.fft.rfft(m_ifg, axis=1))
 
