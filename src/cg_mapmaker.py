@@ -42,7 +42,7 @@ def calculate_b(d, pointing, sigma):
 
     b = np.zeros(
         (
-            g.NPIX,
+            g.NPIX[g.SIM_TYPE],
             g.IFG_SIZE[g.SIM_TYPE],
         ),
         dtype=complex,
@@ -56,7 +56,7 @@ def calculate_b(d, pointing, sigma):
     return b.flatten()
 
 
-def A_dot_x(x, pointing, sigma, npix=g.NPIX):
+def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
     """
     Calculate the matrix-vector product A x = P^T N^{-1} P x.
 
@@ -106,7 +106,7 @@ def preconditioned_conjugate_gradient(
     x=None,
     maxiter=1000,
     tol=1e-10,
-    npix=g.NPIX,
+    npix=g.NPIX[g.SIM_TYPE],
     save_path=None,
 ):
     if x is None:
@@ -264,14 +264,14 @@ if __name__ == "__main__":
     print(f"Starting conjugate gradient solver...")
 
     # set M to be the hits map
-    print("NPIX: ", g.NPIX)
-    hits_map = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
+    print("NPIX: ", g.NPIX[g.SIM_TYPE])
+    hits_map = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
     for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
         for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
             hits_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += 1
     hits_map = hits_map.flatten()
 
-    rms_map = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
+    rms_map = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
     for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
         for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
             rms_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += (
@@ -281,8 +281,7 @@ if __name__ == "__main__":
 
     x0 = np.zeros_like(b)
     for i in range(g.IFG_SIZE[g.SIM_TYPE]):
-        # TODO: ADD HERE X0 FROM WHITE NOISE MAPMAKER SOLUTION FOR IFG MAP CUBE BEFORE FFT
-        x0[g.NPIX * i : g.NPIX * (i + 1)] = hp.read_map(
+        x0[g.NPIX[g.SIM_TYPE] * i : g.NPIX[g.SIM_TYPE] * (i + 1)] = hp.read_map(
             f"../output/white_noise_mapmaker/{g.SIM_TYPE}/ifg_maps/ifg_{i:04d}.fits"
         )
 
@@ -291,7 +290,7 @@ if __name__ == "__main__":
         b, pix, sigma, rms_map, x=x0, save_path="../output/cg/"
     )
 
-    x = x.reshape((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]))
+    x = x.reshape((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
     m = np.abs(np.fft.rfft(x, axis=1))
     t2 = time.time()
     print(f"Finished CG mapmaking in {int((t2 - t1)/60)} minutes.")

@@ -96,7 +96,7 @@ if args.verbose:
     )
 
 print("Simulating dust map...")
-dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust()
+dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust(nside=g.NSIDE["fossil"])
 sed = np.nan_to_num(sed)
 
 print("Generating interferograms...")

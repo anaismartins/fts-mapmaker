@@ -14,7 +14,7 @@ import numpy as np
 import globals as g
 import sims.utils as sims
 
-dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust()
+dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust("firas")
 sed = np.nan_to_num(sed)
 
 spec = dust_map_downgraded_mjy[:, np.newaxis] * sed[np.newaxis, :]
@@ -26,18 +26,15 @@ ifg = ifg.real
 print(f"Shape of ifg: {ifg.shape}")
 
 user = os.environ["USER"]
-data_path = f"/mn/stornext/u3/{user}/d5/firas-reanalysis/Commander/commander3/todscripts/firas/data/sky_v4.4.h5"
-sky_data = h5py.File(
-    data_path,
-    "r",
-)
+data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
+sky_data = np.load(data_path, allow_pickle=True)
 
-mtm_speed = sky_data["df_data"]["mtm_speed"][:]
-mtm_length = sky_data["df_data"]["mtm_length"][:]
+mtm_speed = sky_data["mtm_speed"][:]
+mtm_length = sky_data["mtm_length"][:]
 ss_filter = (mtm_speed == 0) & (mtm_length == 0)
-ecl_lat = sky_data["df_data"]["ecl_lat"][ss_filter]
-ecl_lon = sky_data["df_data"]["ecl_lon"][ss_filter]
-scan_dir = sky_data["df_data"]["scan"][ss_filter]
+ecl_lat = sky_data["ecl_lat"][ss_filter]
+ecl_lon = sky_data["ecl_lon"][ss_filter]
+scan_dir = sky_data["scan"][ss_filter]
 
 total_time = 55.36  # seconds
 flyback_time = 0.42  # seconds

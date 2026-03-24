@@ -38,12 +38,12 @@ def downgrade_map(input_map, nside_out):
     return m_ecl.value
 
 
-def sim_dust():
+def sim_dust(simtype):
 
     dust_map_path = "../input/COM_CompMap_ThermalDust-commander_2048_R2.00.fits"
     dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
 
-    dust_map_downgraded_mjy = downgrade_map(dust_map, g.NSIDE[g.SIM_TYPE])
+    dust_map_downgraded_mjy = downgrade_map(dust_map, g.NSIDE[simtype])
     # get map data from the fits file
     # dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
 
@@ -52,10 +52,10 @@ def sim_dust():
     T_d = 21 * u.K
     beta_d = 1.53
 
-    if g.SIM_TYPE == "firas":
-        frequencies = utils.generate_frequencies()
-    elif g.SIM_TYPE == "fossil":
-        frequencies = utils.generate_frequencies(nfreq=129)
+    if simtype == "firas":
+        frequencies = utils.generate_frequencies("firas")
+    elif simtype == "fossil":
+        frequencies = utils.generate_frequencies("fossil", nfreq=129)
     else:
         raise ValueError("g.SIM_TYPE must be 'firas' or 'fossil'")
 

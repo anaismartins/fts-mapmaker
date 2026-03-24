@@ -1,3 +1,5 @@
+SIM_TYPE = "firas"  # "fossil" or "firas"
+
 IFG_SIZE = {}
 SPEC_SIZE = {}
 
@@ -18,9 +20,10 @@ NSIDE = {}
 NSIDE["fossil"] = 128
 NSIDE["firas"] = 32
 
-SIM_TYPE = "fossil"  # "fossil" or "firas"
+NPIX = {}
+NPIX["fossil"] = 12 * NSIDE["fossil"]**2
+NPIX["firas"] = 12 * NSIDE["firas"]**2
 
-NPIX = 12 * NSIDE[SIM_TYPE]**2
 NPIXPERIFG = {}
 NPIXPERIFG["fossil"] = 256
 NPIXPERIFG["firas"] = 512
