@@ -27,12 +27,12 @@ print(f"Shape of ifgs: {ifgs.shape} and shape of pix: {pix.shape}")
 if g.SIM_TYPE == "fossil":
     pix = pix[:, g.NPIXPERIFG[g.SIM_TYPE] // 2]
 elif g.SIM_TYPE == "firas":
-    pix = pix[g.N_IFGS // 2, :, g.NPIXPERIFG[g.SIM_TYPE] // 2]
+    pix = pix[:, g.NPIXPERIFG[g.SIM_TYPE] // 2, g.N_IFGS // 2]
 else:
     raise ValueError("g.SIM_TYPE must be 'fossil' or 'firas'")
 
 # plot hit map of the scanning strategy
-hit_map = np.bincount(pix, minlength=g.NPIX).astype(float)
+hit_map = np.bincount(pix, minlength=g.NPIX[g.SIM_TYPE]).astype(float)
 mask = hit_map == 0
 hit_map[mask] = hp.UNSEEN
 if g.PNG:
@@ -48,10 +48,10 @@ if g.PNG:
     plt.savefig("../output/hit_maps/middle_pixel.png")
     plt.close()
 
-frequencies = utils.generate_frequencies(nfreq=129)
+frequencies = utils.generate_frequencies(nfreq=g.SPEC_SIZE[g.SIM_TYPE], simtype=g.SIM_TYPE)
 
-m_ifg = np.zeros((g.NPIX, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
-data_density = np.zeros((g.NPIX), dtype=float)
+m_ifg = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
+data_density = np.zeros((g.NPIX[g.SIM_TYPE]), dtype=float)
 
 for i in range(pix.shape[0]):
     m_ifg[pix[i]] += ifgs[i]

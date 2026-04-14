@@ -8,6 +8,7 @@ or in more simple terms we solve
 import multiprocessing
 import os
 import shutil
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,6 +18,13 @@ import numpy as np
 
 import globals as g
 import utils
+
+
+def _save_mollview(map_data, output_path, **kwargs):
+    fig = plt.figure()
+    hp.mollview(map_data, fig=fig.number, **kwargs)
+    fig.savefig(output_path)
+    plt.close(fig)
 
 
 def calculate_b(d, pointing, sigma):
@@ -45,7 +53,7 @@ def calculate_b(d, pointing, sigma):
             g.NPIX[g.SIM_TYPE],
             g.IFG_SIZE[g.SIM_TYPE],
         ),
-        dtype=complex,
+        dtype=np.float64,
     )
     for pix_i in range(d.shape[0]):
         for x_i in range(d.shape[1]):
@@ -77,7 +85,10 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
 
     x = x.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
 
-    Px = np.zeros((pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]), dtype=complex)
+    Px = np.zeros(
+        (pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]),
+        dtype=np.float64,
+    )
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
         for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
             Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i]
@@ -88,7 +99,7 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
 
     # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
-    A_x = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=complex)
+    A_x = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=np.float64)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
         for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
             A_x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += N_inv_Px[
@@ -111,6 +122,12 @@ def preconditioned_conjugate_gradient(
 ):
     if x is None:
         x = np.zeros_like(b)
+    else:
+        x = np.asarray(x, dtype=np.float64)
+
+    b = np.asarray(b, dtype=np.float64)
+    sigma = np.asarray(sigma, dtype=np.float64)
+    precond = np.asarray(precond, dtype=np.float64)
 
     Ax = A_dot_x(x, pointing, sigma, npix=npix)
     print(f"b: {b}")
@@ -141,7 +158,8 @@ def preconditioned_conjugate_gradient(
         # check what is causing the nans in eps
         # print("debug:", delta_new, delta0, delta_new / delta0)
 
-        print(f"PCG iteration {i+1}/{maxiter}, eps={delta_new/delta0}")
+        eps = delta_new / delta0 if delta0 != 0 else 0.0
+        print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
         q = A_dot_x(d, pointing, sigma, npix=npix)
 
         alpha = delta_new / np.dot(d.T, q)
@@ -173,38 +191,47 @@ def preconditioned_conjugate_gradient(
 
         print(f"Plotting intermediate results for iteration {i}...")
 
-        hp.mollview(
+        _save_mollview(
             m[:, 100],
+            f"{save_path}maps/iter_{i:04}.png",
             title=f"CG map at frequency index 100 for iteration {i:04}",
             unit="Amplitude",
             min=0,
             max=20,
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}maps/iter_{i:04}.png")
-        plt.close()
 
-        hp.mollview(
+        _save_mollview(
             y[:, 100],
+            f"{save_path}ifg/iter_{i:04}.png",
             title=f"IFG map at distance index 100 for iteration {i:04d}",
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}ifg/iter_{i:04}.png")
-        plt.close()
-        hp.mollview(
+        _save_mollview(
             r2[:, 100],
+            f"{save_path}res_ifg/iter_{i:04}.png",
             title="IFG map at distance index 100",
             unit="Amplitude",
             coord=["E", "G"],
         )
-        plt.savefig(f"{save_path}res_ifg/iter_{i:04}.png")
-        plt.close()
 
     return x
 
 
 if __name__ == "__main__":
+    # set up a place to save all terminal output, global input file, and output figures/files
+    output_dir = f"../output/cg_mapmaker/{g.RUN_NAME}"
+    os.makedirs(output_dir, exist_ok=True)
+    shutil.copyfile("/mn/stornext/d5/data/aimartin/fts-mapmaker/src/globals.py",
+                    f"{output_dir}/globals.py")
+    # logging
+    old_stdout = sys.stdout
+    log_file = open(f"{output_dir}/message.log","w")
+    sys.stdout = log_file
+
+    quit()
+
     t1 = time.time()
     print("Initializing CG mapmaker...")
     data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
