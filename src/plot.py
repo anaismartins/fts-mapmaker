@@ -141,7 +141,7 @@ if __name__ == "__main__":
     # ifg = np.load("test_output/ifgs.npz")['ifg']
     # plot_ifgs(ifg)
 
-    dust_map_downgraded_mjy, frequencies, signal = sim_dust()
+    dust_map_downgraded_mjy, frequencies, signal = sim_dust(simtype=g.SIM_TYPE)
 
     plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal)
     # # plot_m_invert(frequencies)

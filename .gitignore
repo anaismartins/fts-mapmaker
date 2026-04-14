@@ -213,3 +213,4 @@ __marimo__/
 *.gif
 *.npy
 *.npz
+runs.txt

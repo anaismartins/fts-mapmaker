@@ -7,17 +7,19 @@ from astropy.io import fits
 from astropy.time import Time
 
 import globals as g
+import os
 import utils
 
 
 def downgrade_map(input_map, nside_out):
-    dust_map_smoothed = hp.smoothing(input_map, fwhm=g.BEAM[g.SIM_TYPE] * np.pi / 180, nest=True)
+    # input_map is now in RING order
+    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[g.SIM_TYPE]))
 
     # alms = hp.map2alm(dust_map_smoothed)
     # dust_map_downgraded = hp.alm2map(alms, nside_out) * u.uK
     dust_map_downgraded = (
         hp.ud_grade(
-            dust_map_smoothed, nside_out=nside_out, order_in="NESTED", order_out="RING"
+            dust_map_smoothed, nside_out=nside_out,
         )
         * u.uK
     )
@@ -27,15 +29,12 @@ def downgrade_map(input_map, nside_out):
         equivalencies=u.brightness_temperature(545 * u.GHz),
     )
 
-    rot = hp.Rotator(coord=["G", "E"])
-    m_ecl = rot.rotate_map_pixel(dust_map_downgraded_mjy)
-
-    hp.mollview(m_ecl, title="Downgraded dust map", unit="$\\mathrm{MJy/sr}$")
+    hp.mollview(dust_map_downgraded_mjy.value, title="Downgraded dust map", unit="$\\mathrm{MJy/sr}$")
     plt.savefig("../output/dust_map_downgraded.png")
     plt.close()
 
     print("Downgraded map to nside", nside_out)
-    return m_ecl.value
+    return dust_map_downgraded_mjy.value
 
 
 def sim_dust(simtype):
@@ -43,7 +42,22 @@ def sim_dust(simtype):
     dust_map_path = "../input/COM_CompMap_ThermalDust-commander_2048_R2.00.fits"
     dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
 
-    dust_map_downgraded_mjy = downgrade_map(dust_map, g.NSIDE[simtype])
+    if not os.path.exists("../output/dust_map_ecl.fits"):
+        # Convert from NESTED to RING (Planck maps are NESTED, rotate_map_alms expects RING)
+        dust_map_ring = hp.reorder(dust_map, n2r=True)
+        # rotate to ecliptic coordinates
+        rot = hp.Rotator(coord=["G", "E"])
+        m_ecl = rot.rotate_map_alms(dust_map_ring)
+        # save
+        hp.write_map("../output/dust_map_ecl.fits", m_ecl, overwrite=True)
+        print("Saved dust map in ecliptic coordinates to ../output/dust_map_ecl.fits")
+    else:
+        print("Loading dust map in ecliptic coordinates from ../output/dust_map_ecl.fits")
+        m_ecl = hp.read_map("../output/dust_map_ecl.fits")
+    hp.mollview(m_ecl, title="Ecliptic dust map")  # Now in RING order
+    plt.savefig("../output/dust_map_ecl.png")
+
+    dust_map_downgraded_mjy = downgrade_map(m_ecl, g.NSIDE[simtype])
     # get map data from the fits file
     # dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
 
@@ -52,12 +66,7 @@ def sim_dust(simtype):
     T_d = 21 * u.K
     beta_d = 1.53
 
-    if simtype == "firas":
-        frequencies = utils.generate_frequencies("firas")
-    elif simtype == "fossil":
-        frequencies = utils.generate_frequencies("fossil", nfreq=129)
-    else:
-        raise ValueError("g.SIM_TYPE must be 'firas' or 'fossil'")
+    frequencies = utils.generate_frequencies(simtype, nfreq=g.SPEC_SIZE[simtype])
 
     signal = utils.dust(frequencies * u.GHz, A_d, nu0_dust, beta_d, T_d).value
     # check for invalid value encountered in divide
@@ -148,5 +157,7 @@ def plot_system(jd, l2_lon, l2_lat):
 
 
 if __name__ == "__main__":
-    jd, l2_lon, l2_lat = read_ephemerides()
-    plot_system(jd, l2_lon, l2_lat)
+    # jd, l2_lon, l2_lat = read_ephemerides()
+    # plot_system(jd, l2_lon, l2_lat)
+
+    dust_map_downgraded = sim_dust("firas")
