@@ -81,8 +81,6 @@ ecl_lats = (
 # make ecl_lons have the same shape as ecl_lats. ecl_lon now has shape of the number of recorded IFGs
 # we want it to have shape (that, npixperifg, n_ifgs) as ecl_lats with copies of the longitudes along the second and third dimensions
 ecl_lons = np.array(np.broadcast_to(ecl_lon[:, np.newaxis, np.newaxis], ecl_lats.shape))
-# check what it looks like
-print(ecl_lons)
 
 # Adjust latitudes to be in the range [-90, 90] (vectorized)
 print(f"shapes of ecl_lats and ecl_lon before adjustment: {ecl_lats.shape}, {ecl_lon.shape}")
@@ -161,6 +159,7 @@ total_ifg = np.sum(ifgs, axis=2)
 
 fig, ax = plt.subplots(2, 1, figsize=(10, 8))
 n = np.random.randint(0, total_ifg.shape[0])
+print(f"Plotting IFG {n}...")
 ax[0].plot(ifgs[n], alpha=0.5)
 ax[0].set_title(f"IFGs for pixel {n}")
 ax[0].set_ylabel("Interferogram")
@@ -182,20 +181,9 @@ fig = plt.figure(figsize=(16, 6))
 
 # Left panel: full-sky mollview
 ax1 = plt.subplot(1, 2, 1)
-hp.mollview(
-    map_pix,
-    title=f"Pixels hit for one interferogram (Full Sky)",
-    unit="Hits",
-    min=0,
-    # max=map_pix.max(),
-    max=g.N_IFGS * g.NPIXPERIFG["firas"],  # Maximum possible hits
-    xsize=2000,
-    coord="E",
-    cmap="Reds",
-    hold=True,
-    sub=(1, 2, 1),
-    format="%d",  # Format colorbar as integers
-)
+hp.mollview(map_pix, title=f"Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
+            max=g.N_IFGS * g.NPIXPERIFG["firas"], xsize=2000, coord="E", cmap="Reds", hold=True,
+            sub=(1, 2, 1), format="%d")
 hp.projplot(
     ecl_lon[n],
     ecl_lat[n],
@@ -246,7 +234,7 @@ plt.savefig(f"../output/sim_firas/pix_hits/{n}.png", dpi=150, bbox_inches="tight
 plt.close()
 
 # add white noise
-noise, sigma = sims.white_noise(total_ifg.shape[0])
+noise, sigma = sims.white_noise(total_ifg.shape[0], simtype="firas")
 total_ifg = total_ifg + noise
 
 np.savez(f"../output/ifgs_firas.npz", ifg=total_ifg, pix=pix_ecl, sigma=sigma)

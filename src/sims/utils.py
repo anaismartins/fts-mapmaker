@@ -1,3 +1,5 @@
+import os
+
 import astropy.units as u
 import healpy as hp
 import matplotlib.pyplot as plt
@@ -7,35 +9,17 @@ from astropy.io import fits
 from astropy.time import Time
 
 import globals as g
-import os
 import utils
 
 
-def downgrade_map(input_map, nside_out):
-    # input_map is now in RING order
-    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[g.SIM_TYPE]))
+def smooth_map(input_map):
+    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[g.SIM_TYPE])) * u.uK
 
-    # alms = hp.map2alm(dust_map_smoothed)
-    # dust_map_downgraded = hp.alm2map(alms, nside_out) * u.uK
-    dust_map_downgraded = (
-        hp.ud_grade(
-            dust_map_smoothed, nside_out=nside_out,
-        )
-        * u.uK
-    )
-
-    dust_map_downgraded_mjy = dust_map_downgraded.to(
+    dust_map_Mjy = dust_map_smoothed.to(
         u.MJy / u.sr,
         equivalencies=u.brightness_temperature(545 * u.GHz),
     )
-
-    hp.mollview(dust_map_downgraded_mjy.value, title="Downgraded dust map", unit="$\\mathrm{MJy/sr}$")
-    plt.savefig("../output/dust_map_downgraded.png")
-    plt.close()
-
-    print("Downgraded map to nside", nside_out)
-    return dust_map_downgraded_mjy.value
-
+    return dust_map_Mjy.value
 
 def sim_dust(simtype):
 
@@ -54,12 +38,8 @@ def sim_dust(simtype):
     else:
         print("Loading dust map in ecliptic coordinates from ../output/dust_map_ecl.fits")
         m_ecl = hp.read_map("../output/dust_map_ecl.fits")
-    hp.mollview(m_ecl, title="Ecliptic dust map")  # Now in RING order
-    plt.savefig("../output/dust_map_ecl.png")
 
-    dust_map_downgraded_mjy = downgrade_map(m_ecl, g.NSIDE[simtype])
-    # get map data from the fits file
-    # dust_map_downgraded_mjy = dust_map_downgraded_mjy[0].data
+    dust_map_Mjy = smooth_map(m_ecl)
 
     nu0_dust = 545 * u.GHz  # Planck 2015
     A_d = 163 * u.uK
@@ -72,15 +52,10 @@ def sim_dust(simtype):
     # check for invalid value encountered in divide
     signal = np.nan_to_num(signal)
 
-    plt.plot(frequencies, signal)
-    # plt.show()
-    plt.savefig("../output/signal.png")
-    plt.close()
-
-    return dust_map_downgraded_mjy, frequencies, signal
+    return dust_map_Mjy, frequencies, signal
 
 
-def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
+def white_noise(ntod, simtype, sigma_min=None, sigma_max=None, signal=None, ifg=True):
     """
     Generate white noise for the interferograms sampling the noise level from a uniform distribution.
 
@@ -101,16 +76,27 @@ def white_noise(ntod, sigma_min=0.001, sigma_max=0.1, ifg=True):
     noise : array
         Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
     """
+    if sigma_min is None and sigma_max is None:
+        sigma_final = 1 / (np.max(signal) * 1e6)
+        print(f"Shape of signal: {signal.shape}, max value: {np.max(signal)} MJy/sr")
+        sigma_each = sigma_final * np.sqrt(signal.shape[0])
+
+        sigma_min = sigma_each / 10
+        sigma_max = sigma_each * 10
     sigmarand = np.random.uniform(sigma_min, sigma_max, (ntod))
     if ifg:
-        size = g.IFG_SIZE[g.SIM_TYPE]
+        size = g.IFG_SIZE[simtype]
     else:
-        size = g.SPEC_SIZE[g.SIM_TYPE]
+        # open noise file
+        with open('sims/noise_fossil.txt') as f:
+            lines = f.readlines()[21:]
+        
+        for line in lines:
+            _, frequency, sensitivity = line.split()
+            print(f"Frequency: {frequency}, Sensitivity: {sensitivity}")
+
+        size = g.SPEC_SIZE[simtype]
     noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, size))
-
-    # save noise in a npz file
-    # np.savez("../output/white_noise.npz", noise=sigmarand)
-
     return noise, sigmarand
 
 def read_ephemerides():

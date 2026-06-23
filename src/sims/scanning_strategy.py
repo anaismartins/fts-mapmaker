@@ -44,7 +44,8 @@ def calculate_batch(batch_idx,
     spin_rate : float, optional
         Spin rate in revolutions per minute. Default is 1/60 rpm (1 revolution per hour).
     """
-    print(f"  Starting batch {batch_idx + 1}...")
+    if verbose:
+        print(f"  Starting batch {batch_idx + 1}...")
 
     # set up times
     # start time is the start date offset by whiever batch idx we are at
@@ -112,9 +113,10 @@ def calculate_batch(batch_idx,
 
     # convert pointing vectors to spherical coordinates
     lon, lat = hp.vec2ang(los_vec, True)
-
     pix = hp.ang2pix(g.NSIDE["fossil"], lon, lat, lonlat=True)
-    print(f"  Finished batch {batch_idx + 1}.")
+
+    if verbose:
+        print(f"  Finished batch {batch_idx + 1}.")
     if verbose:
         hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))
         # save hit map for each batch
@@ -124,8 +126,6 @@ def calculate_batch(batch_idx,
             overwrite=True,
         )
 
-    # split pix, lon, lat into chunks of size num_ifgs
-    pix = np.array(np.split(pix, num_ifgs))
     lon = np.array(np.split(lon, num_ifgs))
     lat = np.array(np.split(lat, num_ifgs))
 
@@ -135,7 +135,7 @@ def calculate_batch(batch_idx,
 if __name__ == "__main__":
     # test splitting into IFGs and generating hit map
     pix, lon, lat = calculate_batch(0, verbose=True)
-    print(f"Shape of pix: {pix.shape}, lon: {lon.shape}, lat: {lat.shape}")
+    print(f"Shape of lon: {lon.shape}, lat: {lat.shape}")
 
     # plot hit map of just one IFG
     hit_map = np.bincount(pix[0], minlength=hp.nside2npix(g.NSIDE["fossil"]))

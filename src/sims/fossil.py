@@ -72,79 +72,83 @@ if not os.path.exists("../output/data/sim_pointing_fossil.npz"):
     print("Saved pointings to ../output/data/sim_pointing_fossil.npz")
 else:
     print("Loading existing pointings...")
-    pix_ecl = np.load("../output/data/sim_pointing_fossil.npz")["pix"]
-    ecl_lon = np.load("../output/data/sim_pointing_fossil.npz")["lon"]
-    ecl_lat = np.load("../output/data/sim_pointing_fossil.npz")["lat"]
+    pointing = np.load("../output/data/sim_pointing_fossil.npz")
+    pix_ecl = pointing["pix"]
+    ecl_lon = pointing["lon"]
+    ecl_lat = pointing["lat"]
     print("Loaded pointings from ../output/data/sim_pointing_fossil.npz")
 
-if args.verbose:
-    print(f"Total number of pointings for the whole survey: {len(pix_ecl):,}")
-    print("Creating hit map...")
-    hit_map = np.bincount(pix_ecl.flatten(), minlength=hp.nside2npix(g.NSIDE["fossil"]))
-
-    print("Generating and saving plot...")
-    hp.mollview(hit_map, title="Hit Map for Fossil Scanning", unit="Hits",coord=["E", "G"])
-    plt.savefig("../output/hit_maps/scanning_strategy_fossil.png", bbox_inches="tight")
-    plt.close()
-    print("Saved hit map to ../output/hit_maps/scanning_strategy_fossil.png")
-
-    # save fits file
-    hp.write_map(
-        "../output/hit_maps/scanning_strategy_fossil.fits",
-        hit_map,
-        overwrite=True,
-    )
-
 print("Simulating dust map...")
-dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust(nside=g.NSIDE["fossil"])
+dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil")
 sed = np.nan_to_num(sed)
 
 print("Generating interferograms...")
-spec = dust_map_downgraded_mjy[:, np.newaxis] * sed[np.newaxis, :]
+spec = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
 print(f"Generated spectral cube with shape {spec.shape}")
+
+# save maps for each frequency
+for nui in range(len(frequencies)):
+    hp.mollview(spec[:, nui], title=f"Spectral map at {frequencies[nui]:.2f} GHz", unit="MJy/sr",
+                xsize=2000, coord=["E", "G"], min=0, max=50)
+    plt.savefig(f"../output/dust_maps/fossil/{int(frequencies[nui]):04d}.png")
+    plt.close()
+
+# TODO: problem should be somewhere after here
 
 ifg = np.fft.irfft(spec, axis=1)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
 
-print("Generated interferogram cube.")
+print(f"Generated interferogram cube with shape {ifg.shape}. pix_ecl has shape: {pix_ecl.shape}")
 
 # now we frankenstein the IFGs together
-ifg_scanning = np.zeros((len(pix_ecl), g.IFG_SIZE["fossil"]))
-for i in range(g.NPIXPERIFG["fossil"]):
-    for pix_i, pix in enumerate(pix_ecl[:, i]):
-        ifg_scanning[pix_i, i] = ifg[pix, i]
+col_idx = np.arange(pix_ecl.shape[1])
+ifg_scanning = ifg[pix_ecl, col_idx]
 
 print(f"Frankensteined IFGs together with shape {ifg_scanning.shape}.")
 
-n = random.randint(0, ifg_scanning.shape[0])
-
+n = random.randrange(ifg_scanning.shape[0])
 print(f"Plotting IFG {n}...")
 
 plt.plot(ifg_scanning[n])
 plt.title(f"IFG {n}")
 plt.ylabel("Interferogram")
-plt.savefig(f"../output/sims/ifgs_modern/{n}.png")
+plt.savefig(f"../output/sims/ifgs_fossil/{n}.png")
 plt.close()
 
 # plot pixels hit on a map
+# Create a two-panel figure: full sky + zoomed view
+fig = plt.figure(figsize=(16, 6))
+
 print(f"Pixels hit: {np.unique(pix_ecl[n])}")
 npix = hp.nside2npix(g.NSIDE["fossil"])
 map_pix = np.bincount(pix_ecl[n], minlength=npix)
-hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds")
+ax1 = plt.subplot(1, 2, 1)
+hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds", hold=True)
+hp.projplot(ecl_lon[n], ecl_lat[n], coord="E", color="green", lonlat=True, marker="x")
+
+ax1.set_position([0.05, 0.1, 0.4, 0.8])
+ax2 = plt.subplot(1, 2, 2)
+hp.gnomview(map_pix, rot=(ecl_lon[n], ecl_lat[n]), title="Pixels hit (gnomonic)", cmap="Reds",
+            hold=True)
 hp.projplot(
     ecl_lon[n],
     ecl_lat[n],
     coord="E",
-    color="green",  # "blue",
+    color="green",
     lonlat=True,
     marker="x",
 )
+
+current_ax = plt.gca()
+current_ax.ticklabel_format(style="plain", axis="both")
+current_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
+current_ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
 plt.savefig(f"../output/pix_hits/fossil_{n}.png")
 plt.close()
 
 # add white noise
-noise, sigma = sims.white_noise(ifg_scanning.shape[0])
+noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning)
 
 ifg_scanning = ifg_scanning + noise
 print(f"Shape of noise: {noise.shape} and shape of sigma: {sigma.shape}")

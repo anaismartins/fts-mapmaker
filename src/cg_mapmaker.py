@@ -230,8 +230,6 @@ if __name__ == "__main__":
     log_file = open(f"{output_dir}/message.log","w")
     sys.stdout = log_file
 
-    quit()
-
     t1 = time.time()
     print("Initializing CG mapmaker...")
     data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")

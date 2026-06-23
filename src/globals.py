@@ -1,4 +1,4 @@
-SIM_TYPE = "firas"  # "fossil" or "firas"
+SIM_TYPE = "fossil"  # "fossil" or "firas"
 
 IFG_SIZE = {}
 SPEC_SIZE = {}
@@ -13,7 +13,7 @@ PNG = True
 FITS = True
 
 BEAM = {}
-BEAM["fossil"] = 2 # degrees
+BEAM["fossil"] = 1.6 # degrees
 BEAM["firas"] = 7 # degrees
 
 NSIDE = {}
