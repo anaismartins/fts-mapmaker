@@ -163,7 +163,10 @@ plt.title(f"IFG {n} with noise")
 plt.ylabel("Interferogram")
 plt.legend()
 plt.savefig(f"../output/sims/ifgs_fossil/{n}_with_noise.png")
-plt.close()
+
+plt.ylim(-0.05, 0.05)
+plt.savefig(f"../output/sims/ifgs_fossil/{n}_with_noise_zoomed.png")
+
 
 np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")
