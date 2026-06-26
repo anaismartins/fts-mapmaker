@@ -2,6 +2,9 @@
 This script generates simulated data for a modern FTS experiment.
 It assumes the same speeds as FIRAS, but without summing up on-board IFGs which are then
 telemetered, i.e. we assume that on-board = telemetered IFG.
+
+NB!!! Should be run on a machine with quite a bit of RAM, as it generates all of the simulations at
+once, and uses around 400 - 500 GB at peak.
 """
 
 import argparse
@@ -148,10 +151,19 @@ plt.savefig(f"../output/pix_hits/fossil_{n}.png")
 plt.close()
 
 # add white noise
-noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning)
+noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
+                                ifg=False)
 
 ifg_scanning = ifg_scanning + noise
-print(f"Shape of noise: {noise.shape} and shape of sigma: {sigma.shape}")
+
+print(f"Plotting the same IFG with noise...")
+plt.plot(ifg_scanning[n])
+plt.plot(noise[n], alpha=0.5, label="Noise")
+plt.title(f"IFG {n} with noise")
+plt.ylabel("Interferogram")
+plt.legend()
+plt.savefig(f"../output/sims/ifgs_fossil/{n}_with_noise.png")
+plt.close()
 
 np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs")

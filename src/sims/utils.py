@@ -55,49 +55,58 @@ def sim_dust(simtype):
     return dust_map_Mjy, frequencies, signal
 
 
-def white_noise(ntod, simtype, sigma_min=None, sigma_max=None, signal=None, ifg=True):
+def white_noise(ntod, simtype, ifg=True, signal=None):
     """
     Generate white noise for the interferograms sampling the noise level from a uniform distribution.
 
     Parameters
     ----------
-    npix : int
-        How many pixels we assume each interferogram hits. For FIRAS, each interferogram will hit a maximum of 3 pixels, meaning this is the minimum number we want to use to divide the scanning strategy into multiple pixels. The higher this number, the closer to simulating a continuous scanning strategy.
     ntod : int
         Number of interferograms.
-    sigma_min : float
-        Standard deviation minimum value for the uniform distribution.
-    sigma_max : float
-        Standard deviation maximum value for the uniform distribution.
+    simtype : str
+        Type of simulation, e.g. "fossil" or "firas".
     ifg : bool
         If True, generate noise for interferograms (IFG_SIZE). If False, generate noise for spectra (SPEC_SIZE).
+    signal : array, optional
+        The signal array to determine the noise level.
     Returns
     -------
     noise : array
         Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
     """
-    if sigma_min is None and sigma_max is None:
-        sigma_final = 1 / (np.max(signal) * 1e6)
-        print(f"Shape of signal: {signal.shape}, max value: {np.max(signal)} MJy/sr")
-        sigma_each = sigma_final * np.sqrt(signal.shape[0])
+    size = g.IFG_SIZE[simtype]
+    sigma = None
+    
+    if not ifg:
+        if simtype == "fossil":
+            # open noise file for FOSSIL
+            with open('sims/noise_fossil.txt') as f:
+                lines = f.readlines()[20:]
+            
+            noise_each = np.zeros(129) # TODO: my frequencies and the noise frequencies do not match, decide what to do
+            for i, line in enumerate(lines):
+                if i >= 129:
+                    break
+                _, _, sensitivity = line.split()
 
-        sigma_min = sigma_each / 10
-        sigma_max = sigma_each * 10
-    sigmarand = np.random.uniform(sigma_min, sigma_max, (ntod))
-    if ifg:
-        size = g.IFG_SIZE[simtype]
-    else:
-        # open noise file
-        with open('sims/noise_fossil.txt') as f:
-            lines = f.readlines()[21:]
-        
-        for line in lines:
-            _, frequency, sensitivity = line.split()
-            print(f"Frequency: {frequency}, Sensitivity: {sensitivity}")
+                noise_each[i] = float(sensitivity) * np.sqrt(signal.shape[0]) / 10e6 # MJy
+                
+            # Transform tabulated spectral sensitivities to the interferogram domain.
+            # A standard deviation must be non-negative, so we enforce positivity.
+            sigma = np.fft.irfft(noise_each, n=size)
+            sigma = np.abs(np.real(sigma))
+        elif simtype == "firas":
+            firas_noise = fits.open("sims/FIRAS_CALIBRATION_ERRORS_LHSS.FITS")
+            print(firas_noise.info()) # TODO: check this and plot against calibration paper, figure 9
+            raise NotImplementedError("FIRAS noise model is not implemented yet.")
 
-        size = g.SPEC_SIZE[simtype]
-    noise = np.random.normal(0, sigmarand[:, np.newaxis], (ntod, size))
-    return noise, sigmarand
+        print(f"Noise shape: {sigma.shape}, signal shape: {signal.shape}")
+
+    if sigma is None:
+        raise ValueError("Could not derive noise sigma; check simtype/ifg configuration.")
+
+    noise = np.random.normal(0, sigma[np.newaxis, :], (ntod, size))
+    return noise, sigma
 
 def read_ephemerides():
     start = 58
