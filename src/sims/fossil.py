@@ -77,7 +77,7 @@ survey_time = survey_len * 365.25 * 24 * 3600 # seconds
 obs_eff = 0.7
 
 
-pointing_cache = DATA_DIR / "sim_pointing_fossil.npz"
+pointing_cache = DATA_DIR / f"sim_pointing_fossil_{survey_len}years.npz"
 
 if not pointing_cache.exists():
     # run for full survey  using parallelization
@@ -205,21 +205,23 @@ if plot_outputs:
 noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
                                 ifg=False)
 
-ifg_scanning = ifg_scanning + noise
+ifg_final = ifg_scanning + noise
 
 if plot_outputs:
-    plt.plot(ifg_scanning[n])
+    plt.plot(ifg_final[n], alpha=0.5, label="Signal + Noise")
+    plt.plot(ifg_scanning[n], alpha=0.5, label="Signal")
     plt.plot(noise[n], alpha=0.5, label="Noise")
+    
     plt.title(f"IFG {n} with noise")
     plt.ylabel("Interferogram")
     plt.legend()
     plt.savefig(IFG_DIR / f"{n}_with_noise.png")
 
-    plt.ylim(-0.05, 0.05)
+    plt.ylim(-0.001, 0.001)
     plt.savefig(IFG_DIR / f"{n}_with_noise_zoomed.png")
 
     print(f"Saved IFG {n} with noise to {IFG_DIR} ------------------------------------------------")
 
 
-np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_scanning, pix=pix_ecl, sigma=sigma)
+np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_final, pix=pix_ecl, sigma=sigma)
 print("Saved IFGs and pixel indices to ../output/ifgs_fossil.npz ---------------------------------")

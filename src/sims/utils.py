@@ -95,6 +95,7 @@ def white_noise(ntod, simtype, ifg=True, signal=None):
             # A standard deviation must be non-negative, so we enforce positivity.
             sigma = np.fft.irfft(noise_each, n=size)
             sigma = np.abs(np.real(sigma))
+            print(f"Noise level: {np.max(sigma):.2f} MJy/sr")
         elif simtype == "firas":
             firas_noise = fits.open("sims/FIRAS_CALIBRATION_ERRORS_LHSS.FITS")
             print(firas_noise.info()) # TODO: check this and plot against calibration paper, figure 9
