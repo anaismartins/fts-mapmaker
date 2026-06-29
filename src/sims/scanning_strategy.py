@@ -126,6 +126,7 @@ def calculate_batch(batch_idx,
             overwrite=True,
         )
 
+    pix = np.array(np.split(pix, num_ifgs))
     lon = np.array(np.split(lon, num_ifgs))
     lat = np.array(np.split(lat, num_ifgs))
 
