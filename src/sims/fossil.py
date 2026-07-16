@@ -14,6 +14,7 @@ import warnings
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from time import time
+import utils
 
 import healpy as hp
 import matplotlib.pyplot as plt
@@ -76,7 +77,6 @@ survey_len = 4 # years
 survey_time = survey_len * 365.25 * 24 * 3600 # seconds
 obs_eff = 0.7
 
-
 pointing_cache = DATA_DIR / f"sim_pointing_fossil_{survey_len}years.npz"
 
 if not pointing_cache.exists():
@@ -112,21 +112,41 @@ if not pointing_cache.exists():
     print(f"Saved pointings to {pointing_cache} --------------------------------------------------")
 else:
     print("Loading existing pointings...")
+    t_load_start = time()
     pointing = np.load(pointing_cache)
+    t_load_end = time()
+    print(f"DEBUG: np.load took {t_load_end - t_load_start:.2f} s")
+
+    t_extract_start = time()
     pix_ecl = pointing["pix"]
     ecl_lon = pointing["lon"]
     ecl_lat = pointing["lat"]
+    t_extract_end = time()
+    print(f"DEBUG: extracting pix/lon/lat took {t_extract_end - t_extract_start:.2f} s")
+
     if pix_ecl.ndim == 1:
+        t_split_start = time()
         pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
-    print(f"Loaded pointings from {pointing_cache}")
+        t_split_end = time()
+        print(f"DEBUG: splitting 1D pix array took {t_split_end - t_split_start:.2f} s")
+
+    print(f"Loaded pointings from {pointing_cache} DEBUG: with shape {pix_ecl.shape}")
 
 print("Simulating dust map...")
 dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil")
 sed = np.nan_to_num(sed)
 # TODO: problem should be somewhere after here
 print("Generating interferograms...")
-ifg = np.fft.irfft(dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :], axis=1)
+
+dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
+bb = utils.planck(frequencies, temp=2.7)
+
+print(f"DEBUG: shape of dust: {dust.shape}, shape of bb: {bb.shape}, shape of sed: {sed.shape}")
+
+ifg = np.fft.irfft(dust - bb, axis=1)
+print(f"DEBUG: ifg after irfft: {ifg}")
 ifg = np.roll(ifg, 180, axis=1)
+print(f"DEBUG: ifg before taking real part: {ifg}")
 ifg = ifg.real
 print(f"Generated interferogram cube with shape {ifg.shape}")
 
@@ -150,6 +170,9 @@ if plot_outputs:
 # now we frankenstein the IFGs together
 col_idx = np.arange(pix_ecl.shape[1])
 ifg_scanning = ifg[pix_ecl, col_idx]
+
+print(f"DEBUG: ifg: {ifg}")
+print(f"DEBUG: ifg_scanning: {ifg_scanning}")
 
 print(f"Frankensteined IFGs together with shape {ifg_scanning.shape}.")
 
@@ -223,5 +246,7 @@ if plot_outputs:
     print(f"Saved IFG {n} with noise to {IFG_DIR} ------------------------------------------------")
 
 
-np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg=ifg_final, pix=pix_ecl, sigma=sigma)
-print("Saved IFGs and pixel indices to ../output/ifgs_fossil.npz ---------------------------------")
+np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg_final)
+np.savez(f"../output/pointing_{g.SIM_TYPE}.npz", pix_ecl)
+np.savez(f"../output/noise_{g.SIM_TYPE}.npz", sigma)
+print("Saved IFGs, pixel indices, and noise to ../output -----------------------------------------")

@@ -10,7 +10,7 @@ IFG_SIZE["firas"] = 512
 SPEC_SIZE["firas"] = 257
 
 PNG = True
-FITS = True
+FITS = False
 
 BEAM = {}
 BEAM["fossil"] = 1.6 # degrees

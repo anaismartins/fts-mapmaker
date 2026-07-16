@@ -18,6 +18,8 @@ def planck(freq, temp):
     c = 299792458e-9  # m GHz
     k = 1.380649e-23  # J K-1
 
+    temp = np.asarray(temp)
+
     if temp.shape != ():
         freq = freq[np.newaxis, :]
         temp = temp[:, np.newaxis]

@@ -11,12 +11,9 @@ sys.path.append(parent)
 import globals as g
 import utils
 
-data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
-print("Loaded IFG data from disk.")
-
-ifgs = data["ifg"]
-pix = data["pix"]
-print("Separated data into IFGs and pointing.")
+ifgs = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
+pix = np.load(f"../output/pointing_{g.SIM_TYPE}.npz")
+print("Loaded IFG and pointing data from disk.")
 
 if g.SIM_TYPE == "firas":
     ifgs = ifgs / g.N_IFGS
@@ -45,25 +42,28 @@ if g.PNG:
         xsize=2000,
         coord=["E", "G"],
     )
-    plt.savefig("../output/hit_maps/middle_pixel.png")
+    plt.savefig("../output/hit_maps/binned.png")
     plt.close()
+
+    print("Saved hit map of the scanning strategy to ../output/hit_maps/binned.png ----------------------------------------------------------------------------")
 
 frequencies = utils.generate_frequencies(nfreq=g.SPEC_SIZE[g.SIM_TYPE], simtype=g.SIM_TYPE)
 
-m_ifg = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
-data_density = np.zeros((g.NPIX[g.SIM_TYPE]), dtype=float)
+npix = g.NPIX[g.SIM_TYPE]
+pix = pix.astype(np.int64, copy=False)
 
-for i in range(pix.shape[0]):
-    m_ifg[pix[i]] += ifgs[i]
-    data_density[pix[i]] += 1
+m_ifg = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
+
+# Vectorized accumulation is much faster than looping in Python.
+np.add.at(m_ifg, pix, ifgs)
+data_density = np.bincount(pix, minlength=npix).astype(float)
 
 mask = data_density == 0
-m_ifg[~mask] = m_ifg[~mask] / data_density[~mask][:, np.newaxis]
+np.divide(m_ifg, data_density, out=m_ifg, where=~mask)
 m_ifg[mask] = np.nan
 
 m = np.fft.rfft(m_ifg, axis=1)
 m_abs = np.abs(m)
-m_real = np.real(m)
 
 print("Finished generating map cube, saving to disk...")
 
@@ -71,7 +71,7 @@ print("Finished generating map cube, saving to disk...")
 for nui in range(len(frequencies)):
     if g.FITS:
         hp.write_map(
-            f"../output/binned_mapmaker/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.fits",
+            f"../output/binned/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.fits",
             m_abs[:, nui],
             overwrite=True,
             dtype=np.float64,
@@ -81,13 +81,17 @@ for nui in range(len(frequencies)):
             m_abs[:, nui],
             title=f"{int(frequencies[nui]):04d} GHz",
             unit="MJy/sr",
-            min=0,
-            max=50,
+            # min=0,
+            # max=50,
+            norm='hist',
             xsize=2000,
             coord=["E", "G"],
         )
         plt.savefig(
-            f"../output/binned_mapmaker/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.png"
+            f"../output/binned/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.png"
         )
         plt.close()
         plt.clf()
+
+if g.PNG:
+    print(f"Saved maps to ../output/binned/{g.SIM_TYPE}/ --------------------------------------------------")
