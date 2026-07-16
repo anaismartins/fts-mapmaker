@@ -80,7 +80,7 @@ def white_noise(ntod, simtype, ifg=True, signal=None):
     if not ifg:
         if simtype == "fossil":
             # open noise file for FOSSIL
-            with open('sims/noise_fossil.txt') as f:
+            with open('sims/data/noise_fossil.txt') as f:
                 lines = f.readlines()[20:]
             
             noise_each = np.zeros(129) # TODO: my frequencies and the noise frequencies do not match, decide what to do

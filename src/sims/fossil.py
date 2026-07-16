@@ -24,6 +24,19 @@ from erfa import ErfaWarning
 import globals as g
 import sims.utils as sims
 from sims.scanning_strategy import calculate_batch
+from sims.fossil_utils import create_pointings
+
+from time import time as _time
+
+with open("../output/profiling.txt", "w") as f:
+    f.write("Profiling output for FOSSIL simulation\n")
+    f.write("=" * 50 + "\n")
+
+def log_step(label, t_start):
+    t = _time()
+    with open("../output/profiling.txt", "a") as f:
+        f.write(f"[{label}] took {t - t_start:.2f} s\n")
+    return t
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -49,14 +62,6 @@ plot_outputs = not args.no_plots
 
 print("Simulating scanning strategy for FOSSIL...")
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-INPUT_DIR = ROOT_DIR / "input"
-OUTPUT_DIR = ROOT_DIR / "output"
-DUST_MAP_DIR = OUTPUT_DIR / "sims" / "fossil" / "dust_maps"
-IFG_DIR = OUTPUT_DIR / "sims" / "fossil" / "ifgs"
-PIX_HIT_DIR = OUTPUT_DIR /"sims" / "fossil" / "pix_hits"
-DATA_DIR = OUTPUT_DIR / "data"
-
 if plot_outputs:
     for directory in [DUST_MAP_DIR, IFG_DIR, PIX_HIT_DIR, DATA_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
@@ -66,87 +71,38 @@ def available_cpu_count():
         return len(os.sched_getaffinity(0))
     return cpu_count()
 
-
-def resolve_worker_count(n_batches):
-    if args.workers is not None:
-        return max(1, min(args.workers, n_batches))
-    return max(1, min(available_cpu_count(), n_batches))
-
-# instrument parameters
-survey_len = 4 # years
-survey_time = survey_len * 365.25 * 24 * 3600 # seconds
-obs_eff = 0.7
-
-pointing_cache = DATA_DIR / f"sim_pointing_fossil_{survey_len}years.npz"
+pointing_cache = g.DATA_DIR / f"sim_pointing.npz"
 
 if not pointing_cache.exists():
-    # run for full survey  using parallelization
-    n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
-    n_workers = resolve_worker_count(n_batches)
-    print(f"\n{'='*60}")
-    print(f"Starting parallel processing of {n_batches} batches")
-    print(f"Using {n_workers} workers (CPU cores available: {available_cpu_count()})")
-    print(f"{'='*60}\n")
-
-    t_start = time()
-    with Pool(n_workers) as pool:
-        results = pool.map(calculate_batch, range(n_batches))
-    t_end = time()
-
-    print(f"\n{'='*60}")
-    print(f"Parallel processing complete!")
-    print(f"Total time: {t_end - t_start:.2f} seconds")
-    print(f"Average time per batch: {(t_end - t_start)/n_batches:.2f} seconds")
-    print(f"{'='*60}\n")
-
-    # Combine results
-    print("Combining results from all batches...")
-    # extract pix from results
-    pix_list, lon_list, lat_list = zip(*results)
-    pix_ecl = np.concatenate(pix_list)
-    ecl_lon = np.concatenate(lon_list)
-    ecl_lat = np.concatenate(lat_list)
-
-    # save all pointings
-    np.savez(pointing_cache, pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
-    print(f"Saved pointings to {pointing_cache} --------------------------------------------------")
+    create_pointings()
 else:
     print("Loading existing pointings...")
-    t_load_start = time()
     pointing = np.load(pointing_cache)
-    t_load_end = time()
-    print(f"DEBUG: np.load took {t_load_end - t_load_start:.2f} s")
 
-    t_extract_start = time()
     pix_ecl = pointing["pix"]
     ecl_lon = pointing["lon"]
     ecl_lat = pointing["lat"]
-    t_extract_end = time()
-    print(f"DEBUG: extracting pix/lon/lat took {t_extract_end - t_extract_start:.2f} s")
 
     if pix_ecl.ndim == 1:
-        t_split_start = time()
         pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
-        t_split_end = time()
-        print(f"DEBUG: splitting 1D pix array took {t_split_end - t_split_start:.2f} s")
 
-    print(f"Loaded pointings from {pointing_cache} DEBUG: with shape {pix_ecl.shape}")
+    print(f"Loaded pointings from {pointing_cache}")
 
+t0 = _time()
 print("Simulating dust map...")
 dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil")
-sed = np.nan_to_num(sed)
+t0 = log_step("sim_dust", t0)
 # TODO: problem should be somewhere after here
-print("Generating interferograms...")
 
+print("Working on SEDs...")
 dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
 bb = utils.planck(frequencies, temp=2.7)
+t0 = log_step("planck + dust multiplication", t0)
 
-print(f"DEBUG: shape of dust: {dust.shape}, shape of bb: {bb.shape}, shape of sed: {sed.shape}")
-
+print("Generating interferograms...")
 ifg = np.fft.irfft(dust - bb, axis=1)
-print(f"DEBUG: ifg after irfft: {ifg}")
+t0 = log_step("irfft", t0)
 ifg = np.roll(ifg, 180, axis=1)
-print(f"DEBUG: ifg before taking real part: {ifg}")
 ifg = ifg.real
 print(f"Generated interferogram cube with shape {ifg.shape}")
 
@@ -170,9 +126,7 @@ if plot_outputs:
 # now we frankenstein the IFGs together
 col_idx = np.arange(pix_ecl.shape[1])
 ifg_scanning = ifg[pix_ecl, col_idx]
-
-print(f"DEBUG: ifg: {ifg}")
-print(f"DEBUG: ifg_scanning: {ifg_scanning}")
+t0 = log_step("ifg_scanning indexing", t0)
 
 print(f"Frankensteined IFGs together with shape {ifg_scanning.shape}.")
 
@@ -203,14 +157,14 @@ if plot_outputs:
         map_pix,
         rot=(ecl_lon[n], ecl_lat[n]),
         title="Pixels hit (gnomonic)",
-        cmap="Reds",
+        cmap="RdYlGn",
         hold=True,
     )
     hp.projplot(
         ecl_lon[n],
         ecl_lat[n],
         coord="E",
-        color="green",
+        color="blue",
         lonlat=True,
         marker="x",
     )
@@ -227,6 +181,7 @@ if plot_outputs:
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
                                 ifg=False)
+t0 = log_step("white_noise", t0)
 
 ifg_final = ifg_scanning + noise
 
@@ -246,7 +201,7 @@ if plot_outputs:
     print(f"Saved IFG {n} with noise to {IFG_DIR} ------------------------------------------------")
 
 
-np.savez(f"../output/ifgs_{g.SIM_TYPE}.npz", ifg_final)
-np.savez(f"../output/pointing_{g.SIM_TYPE}.npz", pix_ecl)
-np.savez(f"../output/noise_{g.SIM_TYPE}.npz", sigma)
-print("Saved IFGs, pixel indices, and noise to ../output -----------------------------------------")
+np.savez(f"{DATA_DIR}/ifgs.npz", ifg_final)
+np.savez(f"{DATA_DIR}/pointing.npz", pix_ecl)
+np.savez(f"{DATA_DIR}/noise.npz", sigma)
+print(f"Saved IFGs, pixel indices, and noise to {DATA_DIR} ---------------------------------------")

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 SIM_TYPE = "fossil"  # "fossil" or "firas"
 
 IFG_SIZE = {}
@@ -34,4 +36,10 @@ NOISE = "only white"  # "only white" or "1f"
 
 F_NYQ = 112  # Hz (LLSS from FIRAS)
 
-RUN_NAME = "run1"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+INPUT_DIR = ROOT_DIR / "input"
+OUTPUT_DIR = ROOT_DIR / "output"
+DUST_MAP_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "dust_maps"
+IFG_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "ifgs"
+PIX_HIT_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "pix_hits"
+DATA_DIR = OUTPUT_DIR / "data" / SIM_TYPE

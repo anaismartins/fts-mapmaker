@@ -214,4 +214,5 @@ __marimo__/
 *.npy
 *.npz
 runs.txt
-src/sims/noise_fossil.txt
+src/sims/data/noise_fossil.txt
+output/
