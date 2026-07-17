@@ -136,12 +136,6 @@ def calculate_batch(batch_idx,
 
     return pix, lon, lat
 
-
-def resolve_worker_count(args, n_batches):
-    if args.workers is not None:
-        return max(1, min(args.workers, n_batches))
-    return max(1, min(available_cpu_count(), n_batches))
-
 def available_cpu_count():
     if hasattr(os, "sched_getaffinity"):
         return len(os.sched_getaffinity(0))
@@ -154,13 +148,13 @@ def create_pointings(args):
 
     # run for full survey  using parallelization
     n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
-    n_workers = resolve_worker_count(args, n_batches)
     print(f"\n{'='*60}")
     print(f"Starting parallel processing of {n_batches} batches")
-    print(f"Using {n_workers} workers (CPU cores available: {available_cpu_count()})")
+    nworkers = min(args.nworkers, n_batches)
+    print(f"Using {nworkers} workers (CPU cores available: {available_cpu_count()})")
     print(f"{'='*60}\n")
 
-    with Pool(n_workers) as pool:
+    with Pool(nworkers) as pool:
         results = pool.map(calculate_batch, range(n_batches))
 
     # Combine results

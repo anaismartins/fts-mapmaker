@@ -10,11 +10,13 @@ once, and uses around 400 - 500 GB at peak.
 import os
 import random
 import warnings
+from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.fft as fft
 from erfa import ErfaWarning
 
 import globals as g
@@ -30,7 +32,7 @@ warnings.filterwarnings('ignore', category=ErfaWarning)
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
-    f.write(f"Number of workers used: {args.workers}\n")
+    f.write(f"Number of workers used: {args.nworkers}\n")
     f.write("=" * 50 + "\n")
 
 t0 = _time()
@@ -55,7 +57,7 @@ dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
 bb = spectra.planck(frequencies, temp=2.7)
 t0 = utils.log_step("planck + dust multiplication", t0, args.run_name)
 
-ifg = np.fft.irfft(dust)# - bb, axis=1)
+ifg = fft.irfft(dust)# - bb, axis=1)
 t0 = utils.log_step("irfft", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
@@ -63,12 +65,16 @@ t0 = utils.log_step("roll", t0, args.run_name)
 
 if args.plots == "debug":
     # save maps for each frequency
-    for nui in range(len(frequencies)):
-        spectral_map = dust_map_Mjy * sed[nui]
-        hp.mollview(spectral_map, title=f"Spectral map at {frequencies[nui]:.2f} GHz",
-                    unit="MJy/sr", xsize=2000, coord=["E", "G"], min=0, max=50)
-        plt.savefig(g.DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
-        plt.close()
+    # for nui in range(len(frequencies)):
+    #     hp.mollview(dust[:, nui], title=f"Spectral map at {frequencies[nui]:.2f} GHz",
+    #                 unit="MJy/sr", xsize=2000, coord=["E", "G"], min=0, max=50)
+    #     plt.savefig(g.DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
+    #     plt.close()
+    nworkers = min(args.nworkers, len(frequencies))
+    args_list = [(frequencies[nui], dust[:, nui], g.DUST_MAP_DIR) for nui in range(len(frequencies))]
+
+    with Pool(processes=nworkers) as pool:
+        pool.starmap(utils.save_maps, args_list)
     print(f"Saved dust maps to {g.DUST_MAP_DIR}.")
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
 
@@ -103,29 +109,13 @@ if args.plots == "debug" or args.plots == "paper_only":
     vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds", min=0, max=vmax, hold=True)
-    hp.projplot(row_lon, row_lat, coord="E", color="green", lonlat=True, marker=".", ms=1)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
     ax2 = plt.subplot(1, 2, 2)
-    hp.gnomview(
-        map_pix,
-        rot=(lon_center, lat_center, 0),
-        title="Pixels hit (gnomonic)",
-        cmap="RdYlGn",
-        min=0,
-        max=vmax,
-        coord="E",
-        hold=True,
-    )
-    hp.projplot(
-        row_lon,
-        row_lat,
-        coord="E",
-        color="blue",
-        lonlat=True,
-        marker=".",
-        ms=1,
-    )
+    hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Pixels hit", cmap="RdYlGn", min=0,
+                max=vmax, coord="E", hold=True)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     current_ax = plt.gca()
     current_ax.ticklabel_format(style="plain", axis="both")
