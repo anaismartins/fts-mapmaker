@@ -3,7 +3,9 @@ Utils for scanning strategy, in particular simulates the scanning strategy for a
 satellite in batches.
 """
 
+import os
 import warnings
+from multiprocessing import Pool, cpu_count
 
 import astropy.units as u
 import healpy as hp
@@ -12,14 +14,10 @@ import numpy as np
 from astropy.coordinates import get_sun
 from astropy.time import Time
 from erfa import ErfaWarning
+from memory_profiler import profile
 
 import globals as g
-from memory_profiler import profile
-import os
-from multiprocessing import cpu_count
-import sims.utils as sims
-from multiprocessing import Pool
-
+import utils
 
 # Suppress ERFA warnings about dubious year for future dates
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -149,8 +147,7 @@ def available_cpu_count():
         return len(os.sched_getaffinity(0))
     return cpu_count()
 
-@profile
-def create_pointings(args, pointing_cache, t0):
+def create_pointings(args):
     # instrument parameters
     survey_len = 4 # years
     obs_eff = 0.7
@@ -165,7 +162,6 @@ def create_pointings(args, pointing_cache, t0):
 
     with Pool(n_workers) as pool:
         results = pool.map(calculate_batch, range(n_batches))
-    t0 = sims.log_step("calculate_all_pointings", t0)
 
     # Combine results
     print("Combining results from all batches...")
@@ -176,8 +172,11 @@ def create_pointings(args, pointing_cache, t0):
     ecl_lat = np.concatenate(lat_list)
 
     # save all pointings
-    np.savez(pointing_cache, pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
-    print(f"Saved pointings to {pointing_cache} --------------------------------------------------")
+    np.save(g.DATA_DIR / "pointing.npy", pix_ecl)
+    np.save(g.DATA_DIR / "ecl_lon.npy", ecl_lon)
+    np.save(g.DATA_DIR / "ecl_lat.npy", ecl_lat)
+    print("Saved pointings.")
+    return pix_ecl, ecl_lon, ecl_lat
 
 if __name__ == "__main__":
     # test splitting into IFGs and generating hit map

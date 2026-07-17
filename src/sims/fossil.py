@@ -7,10 +7,10 @@ NB!!! Should be run on a machine with quite a bit of RAM, as it generates all of
 once, and uses around 400 - 500 GB at peak.
 """
 
-import argparse
+import os
 import random
 import warnings
-import utils
+from time import time as _time
 
 import healpy as hp
 import matplotlib.pyplot as plt
@@ -18,94 +18,64 @@ import numpy as np
 from erfa import ErfaWarning
 
 import globals as g
-import sims.utils as sims
+import sims.dust_map as dust_map
+import sims.noise as noise
 import sims.scanning_strategy as ss
-
-from time import time as _time
+import spectra
+import utils
+from argparser import args
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
-
-# set up line arguments
-parser = argparse.ArgumentParser(description="Simulate scanning strategy for FOSSIL.")
-parser.add_argument("--verbose", "-v", action="store_true", help="Increase output verbosity.")
-parser.add_argument(
-    "--plots",
-    type=str,
-    default="none",
-    help="Plot specific plots depending on the type of run. Default is 'none', which means no plots. Options are: 'debug', 'paper_only'.",
-)
-parser.add_argument(
-    "--workers",
-    type=int,
-    default=None,
-    help="Override the number of worker processes used for scanning batches.",
-)
-parser.add_argument(
-    "--run-name",
-    type=str,
-    default="profiling.txt",
-    help="Name of the run for profiling output.",
-)
-args = parser.parse_args()
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
     f.write(f"Number of workers used: {args.workers}\n")
     f.write("=" * 50 + "\n")
 
-pointing_cache = g.DATA_DIR / f"sim_pointing.npz"
-
 t0 = _time()
 t00 = _time()
-if not pointing_cache.exists():
-    ss.create_pointings(args, pointing_cache, t0)
+if not os.path.exists(f"{g.DATA_DIR}/pointing.npy"):
+    pix_ecl, ecl_lon, ecl_lat = ss.create_pointings(args)
+    t0 = utils.log_step("create_pointings", t0, args.run_name)
 else:
-    pointing = np.load(pointing_cache)
-    t0 = sims.log_step("load_pointings", t0, args.run_name)
-
-    pix_ecl = pointing["pix"]
-    ecl_lon = pointing["lon"]
-    ecl_lat = pointing["lat"]
-    t0 = sims.log_step("separate_pixlonlat", t0, args.run_name)
+    pix_ecl = np.load(g.DATA_DIR / "pointing.npy")
+    ecl_lon = np.load(g.DATA_DIR / "ecl_lon.npy")
+    ecl_lat = np.load(g.DATA_DIR / "ecl_lat.npy")
+    t0 = utils.log_step("load_pointings", t0, args.run_name)
 
     if pix_ecl.ndim == 1:
         pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
     
-dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil", t0, args.run_name)
-t0 = sims.log_step("sim_dust", t0, args.run_name)
+dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
+t0 = utils.log_step("sim_dust", t0, args.run_name)
 # TODO: problem should be somewhere after here
 
 dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
-bb = utils.planck(frequencies, temp=2.7)
-t0 = sims.log_step("planck + dust multiplication", t0, args.run_name)
+bb = spectra.planck(frequencies, temp=2.7)
+t0 = utils.log_step("planck + dust multiplication", t0, args.run_name)
 
-ifg = np.fft.irfft(dust - bb, axis=1)
-t0 = sims.log_step("irfft", t0, args.run_name)
+ifg = np.fft.irfft(dust)# - bb, axis=1)
+t0 = utils.log_step("irfft", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
+t0 = utils.log_step("roll", t0, args.run_name)
 
 if args.plots == "debug":
     # save maps for each frequency
     for nui in range(len(frequencies)):
         spectral_map = dust_map_Mjy * sed[nui]
-        hp.mollview(
-            spectral_map,
-            title=f"Spectral map at {frequencies[nui]:.2f} GHz",
-            unit="MJy/sr",
-            xsize=2000,
-            coord=["E", "G"],
-            min=0,
-            max=50,
-        )
+        hp.mollview(spectral_map, title=f"Spectral map at {frequencies[nui]:.2f} GHz",
+                    unit="MJy/sr", xsize=2000, coord=["E", "G"], min=0, max=50)
         plt.savefig(g.DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
         plt.close()
     print(f"Saved dust maps to {g.DUST_MAP_DIR}.")
+    t0 = utils.log_step("save_dust_maps", t0, args.run_name)
 
 # now we frankenstein the IFGs together
 col_idx = np.arange(pix_ecl.shape[1])
 ifg_scanning = ifg[pix_ecl, col_idx]
-t0 = sims.log_step("ifg_scanning indexing", t0, args.run_name)
+t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
 
 n = random.randrange(ifg_scanning.shape[0])
 if args.plots == "debug":
@@ -167,9 +137,9 @@ if args.plots == "debug" or args.plots == "paper_only":
     print(f"Saved pixel hit map for IFG {n} to {g.PIX_HIT_DIR}.")
 
 # add white noise
-noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
+noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
                                 ifg=False)
-t0 = sims.log_step("white_noise", t0, args.run_name)
+t0 = utils.log_step("white_noise", t0, args.run_name)
 
 ifg_final = ifg_scanning + noise
 
@@ -190,10 +160,9 @@ if args.plots == "debug":
 
 
 np.save(f"{g.DATA_DIR}/ifgs.npy", ifg_final)
-np.save(f"{g.DATA_DIR}/pointing.npy", pix_ecl)
 np.save(f"{g.DATA_DIR}/noise.npy", sigma)
 print(f"Saved IFGs, pixel indices, and noise to {g.DATA_DIR}.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write("=" * 50 + "\n")
-    f.write(f"Total time for FOSSIL simulation: {_time() - t00:.2f} s\n")
+    f.write(f"Total time for FOSSIL simulation: {(_time() - t00)/60:.2f} min\n")

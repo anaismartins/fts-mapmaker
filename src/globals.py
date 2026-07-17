@@ -35,6 +35,7 @@ N_IFGS = 16
 NOISE = "only white"  # "only white" or "1f"
 
 F_NYQ = 112  # Hz (LLSS from FIRAS)
+FIRAS_CHANNELS = {"rh": 0, "rl": 1, "lh": 2, "ll": 3}
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 INPUT_DIR = ROOT_DIR / "input"

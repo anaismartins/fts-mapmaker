@@ -12,7 +12,6 @@ from sims.utils import sim_dust
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-import globals as g
 
 
 def plot_ifgs(ifg):

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="debug_v3"
+run_name="fossil_sim_v9"
 mode="debug" #"release"
 
 owls=(owl{39..46}.uio.no)
@@ -28,6 +28,11 @@ else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
         python -u -m sims.fossil --workers "$nworker" --run-name "$run_name" --plots "debug"
+
+    if [ $? -ne 0 ]; then
+      echo "Error: The simulation failed. Check the output above for details."
+      exit 1
+    fi
 
     # Parse the time stats file for Max RSS
     max_kb=$(awk '/Maximum resident set size/ {print $6}' ../output/time_stats.txt)
