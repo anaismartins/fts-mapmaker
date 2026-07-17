@@ -121,7 +121,7 @@ def generate_frequencies(simtype, channel='ll', mode='ss', nfreq=None):
         elif nfreq == 129: # 134 * 2 = 268 
             nu0 = 15
             f_ghz = np.linspace(nu0, dnu * nfreq, nfreq)
-            print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz")
+            print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz.")
 
         else:
             raise ValueError("For 'fossil' SIM_TYPE, nfreq must be 129 or None")

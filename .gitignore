@@ -215,4 +215,6 @@ __marimo__/
 *.npz
 runs.txt
 src/sims/data/noise_fossil.txt
-output/
+output/*.txt
+output/*/*.txt
+.vscode/

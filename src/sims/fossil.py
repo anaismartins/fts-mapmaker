@@ -8,12 +8,8 @@ once, and uses around 400 - 500 GB at peak.
 """
 
 import argparse
-import os
 import random
 import warnings
-from pathlib import Path
-from multiprocessing import Pool, cpu_count
-from time import time
 import utils
 
 import healpy as hp
@@ -23,20 +19,9 @@ from erfa import ErfaWarning
 
 import globals as g
 import sims.utils as sims
-from sims.scanning_strategy import calculate_batch
-from sims.fossil_utils import create_pointings
+import sims.scanning_strategy as ss
 
 from time import time as _time
-
-with open("../output/profiling.txt", "w") as f:
-    f.write("Profiling output for FOSSIL simulation\n")
-    f.write("=" * 50 + "\n")
-
-def log_step(label, t_start):
-    t = _time()
-    with open("../output/profiling.txt", "a") as f:
-        f.write(f"[{label}] took {t - t_start:.2f} s\n")
-    return t
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -45,9 +30,10 @@ warnings.filterwarnings('ignore', category=ErfaWarning)
 parser = argparse.ArgumentParser(description="Simulate scanning strategy for FOSSIL.")
 parser.add_argument("--verbose", "-v", action="store_true", help="Increase output verbosity.")
 parser.add_argument(
-    "--no-plots",
-    action="store_true",
-    help="Skip plotting and writing PNG diagnostics.",
+    "--plots",
+    type=str,
+    default="none",
+    help="Plot specific plots depending on the type of run. Default is 'none', which means no plots. Options are: 'debug', 'paper_only'.",
 )
 parser.add_argument(
     "--workers",
@@ -55,58 +41,51 @@ parser.add_argument(
     default=None,
     help="Override the number of worker processes used for scanning batches.",
 )
-
+parser.add_argument(
+    "--run-name",
+    type=str,
+    default="profiling.txt",
+    help="Name of the run for profiling output.",
+)
 args = parser.parse_args()
 
-plot_outputs = not args.no_plots
-
-print("Simulating scanning strategy for FOSSIL...")
-
-if plot_outputs:
-    for directory in [DUST_MAP_DIR, IFG_DIR, PIX_HIT_DIR, DATA_DIR]:
-        directory.mkdir(parents=True, exist_ok=True)
-
-def available_cpu_count():
-    if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0))
-    return cpu_count()
+with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+    f.write("Profiling output for FOSSIL simulation\n")
+    f.write(f"Number of workers used: {args.workers}\n")
+    f.write("=" * 50 + "\n")
 
 pointing_cache = g.DATA_DIR / f"sim_pointing.npz"
 
+t0 = _time()
+t00 = _time()
 if not pointing_cache.exists():
-    create_pointings()
+    ss.create_pointings(args, pointing_cache, t0)
 else:
-    print("Loading existing pointings...")
     pointing = np.load(pointing_cache)
+    t0 = sims.log_step("load_pointings", t0, args.run_name)
 
     pix_ecl = pointing["pix"]
     ecl_lon = pointing["lon"]
     ecl_lat = pointing["lat"]
+    t0 = sims.log_step("separate_pixlonlat", t0, args.run_name)
 
     if pix_ecl.ndim == 1:
         pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
-
-    print(f"Loaded pointings from {pointing_cache}")
-
-t0 = _time()
-print("Simulating dust map...")
-dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil")
-t0 = log_step("sim_dust", t0)
+    
+dust_map_Mjy, frequencies, sed = sims.sim_dust("fossil", t0, args.run_name)
+t0 = sims.log_step("sim_dust", t0, args.run_name)
 # TODO: problem should be somewhere after here
 
-print("Working on SEDs...")
 dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
 bb = utils.planck(frequencies, temp=2.7)
-t0 = log_step("planck + dust multiplication", t0)
+t0 = sims.log_step("planck + dust multiplication", t0, args.run_name)
 
-print("Generating interferograms...")
 ifg = np.fft.irfft(dust - bb, axis=1)
-t0 = log_step("irfft", t0)
+t0 = sims.log_step("irfft", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
-print(f"Generated interferogram cube with shape {ifg.shape}")
 
-if plot_outputs:
+if args.plots == "debug":
     # save maps for each frequency
     for nui in range(len(frequencies)):
         spectral_map = dust_map_Mjy * sed[nui]
@@ -119,73 +98,82 @@ if plot_outputs:
             min=0,
             max=50,
         )
-        plt.savefig(DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
+        plt.savefig(g.DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
         plt.close()
-    print(f"Saved dust maps to {DUST_MAP_DIR} ----------------------------------------------------")
+    print(f"Saved dust maps to {g.DUST_MAP_DIR}.")
 
 # now we frankenstein the IFGs together
 col_idx = np.arange(pix_ecl.shape[1])
 ifg_scanning = ifg[pix_ecl, col_idx]
-t0 = log_step("ifg_scanning indexing", t0)
-
-print(f"Frankensteined IFGs together with shape {ifg_scanning.shape}.")
+t0 = sims.log_step("ifg_scanning indexing", t0, args.run_name)
 
 n = random.randrange(ifg_scanning.shape[0])
-if plot_outputs:
+if args.plots == "debug":
     plt.plot(ifg_scanning[n])
     plt.title(f"IFG {n}")
     plt.ylabel("Interferogram")
-    plt.savefig(IFG_DIR / f"{n}.png")
+    plt.savefig(g.IFG_DIR / f"{n}.png")
     plt.close()
-    print(f"Saved IFG {n} to {IFG_DIR} -----------------------------------------------------------")
+    print(f"Saved IFG {n} to {g.IFG_DIR}.")
 
 # plot pixels hit on a map
 # Create a two-panel figure: full sky + zoomed view
-if plot_outputs:
+if args.plots == "debug" or args.plots == "paper_only":
     fig = plt.figure(figsize=(16, 6))
 
-    print(f"Pixels hit: {np.unique(pix_ecl[n])}")
+    row_pix = pix_ecl[n]
+    row_lon = ecl_lon[n]
+    row_lat = ecl_lat[n]
+    lon_center = float(np.mean(row_lon))
+    lat_center = float(np.mean(row_lat))
+
+    print(f"Pixels hit: {np.unique(row_pix).size} unique pixels by IFG {n}.")
     npix = hp.nside2npix(g.NSIDE["fossil"])
-    map_pix = np.bincount(pix_ecl[n], minlength=npix)
+    map_pix = np.bincount(row_pix, minlength=npix)
+    vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
-    hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds", hold=True)
-    hp.projplot(ecl_lon[n], ecl_lat[n], coord="E", color="green", lonlat=True, marker="x")
+    hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="Reds", min=0, max=vmax, hold=True)
+    hp.projplot(row_lon, row_lat, coord="E", color="green", lonlat=True, marker=".", ms=1)
 
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
     ax2 = plt.subplot(1, 2, 2)
     hp.gnomview(
         map_pix,
-        rot=(ecl_lon[n], ecl_lat[n]),
+        rot=(lon_center, lat_center, 0),
         title="Pixels hit (gnomonic)",
         cmap="RdYlGn",
+        min=0,
+        max=vmax,
+        coord="E",
         hold=True,
     )
     hp.projplot(
-        ecl_lon[n],
-        ecl_lat[n],
+        row_lon,
+        row_lat,
         coord="E",
         color="blue",
         lonlat=True,
-        marker="x",
+        marker=".",
+        ms=1,
     )
 
     current_ax = plt.gca()
     current_ax.ticklabel_format(style="plain", axis="both")
     current_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
     current_ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
-    plt.savefig(PIX_HIT_DIR / f"fossil_{n}.png")
+    plt.savefig(g.PIX_HIT_DIR / f"fossil_{n}.png")
     plt.close()
 
-    print(f"Saved pixel hit map for IFG {n} to {PIX_HIT_DIR} -------------------------------------")
+    print(f"Saved pixel hit map for IFG {n} to {g.PIX_HIT_DIR}.")
 
 # add white noise
 noise, sigma = sims.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
                                 ifg=False)
-t0 = log_step("white_noise", t0)
+t0 = sims.log_step("white_noise", t0, args.run_name)
 
 ifg_final = ifg_scanning + noise
 
-if plot_outputs:
+if args.plots == "debug":
     plt.plot(ifg_final[n], alpha=0.5, label="Signal + Noise")
     plt.plot(ifg_scanning[n], alpha=0.5, label="Signal")
     plt.plot(noise[n], alpha=0.5, label="Noise")
@@ -193,15 +181,19 @@ if plot_outputs:
     plt.title(f"IFG {n} with noise")
     plt.ylabel("Interferogram")
     plt.legend()
-    plt.savefig(IFG_DIR / f"{n}_with_noise.png")
+    plt.savefig(g.IFG_DIR / f"{n}_with_noise.png")
 
     plt.ylim(-0.001, 0.001)
-    plt.savefig(IFG_DIR / f"{n}_with_noise_zoomed.png")
+    plt.savefig(g.IFG_DIR / f"{n}_with_noise_zoomed.png")
 
-    print(f"Saved IFG {n} with noise to {IFG_DIR} ------------------------------------------------")
+    print(f"Saved IFG {n} with noise to {g.IFG_DIR}.")
 
 
-np.savez(f"{DATA_DIR}/ifgs.npz", ifg_final)
-np.savez(f"{DATA_DIR}/pointing.npz", pix_ecl)
-np.savez(f"{DATA_DIR}/noise.npz", sigma)
-print(f"Saved IFGs, pixel indices, and noise to {DATA_DIR} ---------------------------------------")
+np.save(f"{g.DATA_DIR}/ifgs.npy", ifg_final)
+np.save(f"{g.DATA_DIR}/pointing.npy", pix_ecl)
+np.save(f"{g.DATA_DIR}/noise.npy", sigma)
+print(f"Saved IFGs, pixel indices, and noise to {g.DATA_DIR}.")
+
+with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    f.write("=" * 50 + "\n")
+    f.write(f"Total time for FOSSIL simulation: {_time() - t00:.2f} s\n")

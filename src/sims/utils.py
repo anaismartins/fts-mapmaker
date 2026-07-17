@@ -7,10 +7,11 @@ import numpy as np
 from astropy.coordinates import get_body
 from astropy.io import fits
 from astropy.time import Time
+import sims.utils as sims
 
 import globals as g
 import utils
-
+from time import time as _time
 
 def smooth_map(input_map):
     dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[g.SIM_TYPE])) * u.uK
@@ -21,23 +22,23 @@ def smooth_map(input_map):
     )
     return dust_map_Mjy.value
 
-def sim_dust(simtype):
-
+def sim_dust(simtype, t0, run_name):
     dust_map_path = "../input/COM_CompMap_ThermalDust-commander_2048_R2.00.fits"
     dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
+    t0 = sims.log_step("load_dust_map", t0, run_name)
 
-    if not os.path.exists("../output/dust_map_ecl.fits"):
+    if not os.path.exists(f"../output/data/{simtype}/dust_map_ecl.fits"):
         # Convert from NESTED to RING (Planck maps are NESTED, rotate_map_alms expects RING)
         dust_map_ring = hp.reorder(dust_map, n2r=True)
         # rotate to ecliptic coordinates
         rot = hp.Rotator(coord=["G", "E"])
         m_ecl = rot.rotate_map_alms(dust_map_ring)
         # save
-        hp.write_map("../output/dust_map_ecl.fits", m_ecl, overwrite=True)
-        print("Saved dust map in ecliptic coordinates to ../output/dust_map_ecl.fits")
+        hp.write_map(f"../output/data/{simtype}/dust_map_ecl.fits", m_ecl, overwrite=True)
+        print(f"Saved dust map in ecliptic coordinates to ../output/data/{simtype}/dust_map_ecl.fits")
     else:
-        print("Loading dust map in ecliptic coordinates from ../output/dust_map_ecl.fits")
-        m_ecl = hp.read_map("../output/dust_map_ecl.fits")
+        print(f"Loading dust map in ecliptic coordinates from ../output/data/{simtype}/dust_map_ecl.fits")
+        m_ecl = hp.read_map(f"../output/data/{simtype}/dust_map_ecl.fits")
 
     dust_map_Mjy = smooth_map(m_ecl)
 
@@ -95,13 +96,11 @@ def white_noise(ntod, simtype, ifg=True, signal=None):
             # A standard deviation must be non-negative, so we enforce positivity.
             sigma = np.fft.irfft(noise_each, n=size)
             sigma = np.abs(np.real(sigma))
-            print(f"Noise level: {np.max(sigma):.2g} MJy/sr")
+            print(f"Maximum noise level per IFG: {np.max(sigma):.2g} MJy/sr.")
         elif simtype == "firas":
             firas_noise = fits.open("sims/FIRAS_CALIBRATION_ERRORS_LHSS.FITS")
             print(firas_noise.info()) # TODO: check this and plot against calibration paper, figure 9
             raise NotImplementedError("FIRAS noise model is not implemented yet.")
-
-        print(f"Noise shape: {sigma.shape}, signal shape: {signal.shape}")
 
     if sigma is None:
         raise ValueError("Could not derive noise sigma; check simtype/ifg configuration.")
@@ -151,6 +150,11 @@ def plot_system(jd, l2_lon, l2_lat):
         plt.savefig(f"../output/sims/scanning_strategy/ephemerides_{t:05d}.png")
         plt.clf()
 
+def log_step(label, t_start, run_name):
+    t = _time()
+    with open(f"../output/profiling/{run_name}.txt", "a") as f:
+        f.write(f"[{label}] took {t - t_start:.2f} s\n")
+    return t
 
 if __name__ == "__main__":
     # jd, l2_lon, l2_lat = read_ephemerides()

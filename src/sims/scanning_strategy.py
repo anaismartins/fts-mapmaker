@@ -14,6 +14,12 @@ from astropy.time import Time
 from erfa import ErfaWarning
 
 import globals as g
+from memory_profiler import profile
+import os
+from multiprocessing import cpu_count
+import sims.utils as sims
+from multiprocessing import Pool
+
 
 # Suppress ERFA warnings about dubious year for future dates
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -132,6 +138,46 @@ def calculate_batch(batch_idx,
 
     return pix, lon, lat
 
+
+def resolve_worker_count(args, n_batches):
+    if args.workers is not None:
+        return max(1, min(args.workers, n_batches))
+    return max(1, min(available_cpu_count(), n_batches))
+
+def available_cpu_count():
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return cpu_count()
+
+@profile
+def create_pointings(args, pointing_cache, t0):
+    # instrument parameters
+    survey_len = 4 # years
+    obs_eff = 0.7
+
+    # run for full survey  using parallelization
+    n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
+    n_workers = resolve_worker_count(args, n_batches)
+    print(f"\n{'='*60}")
+    print(f"Starting parallel processing of {n_batches} batches")
+    print(f"Using {n_workers} workers (CPU cores available: {available_cpu_count()})")
+    print(f"{'='*60}\n")
+
+    with Pool(n_workers) as pool:
+        results = pool.map(calculate_batch, range(n_batches))
+    t0 = sims.log_step("calculate_all_pointings", t0)
+
+    # Combine results
+    print("Combining results from all batches...")
+    # extract pix from results
+    pix_list, lon_list, lat_list = zip(*results)
+    pix_ecl = np.concatenate(pix_list)
+    ecl_lon = np.concatenate(lon_list)
+    ecl_lat = np.concatenate(lat_list)
+
+    # save all pointings
+    np.savez(pointing_cache, pix=pix_ecl, lon=ecl_lon, lat=ecl_lat)
+    print(f"Saved pointings to {pointing_cache} --------------------------------------------------")
 
 if __name__ == "__main__":
     # test splitting into IFGs and generating hit map

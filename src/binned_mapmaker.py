@@ -10,9 +10,12 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 import globals as g
 import utils
+from time import time as _time
 
-ifgs = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
-pix = np.load(f"../output/pointing_{g.SIM_TYPE}.npz")
+t00 = _time()
+
+ifgs = np.load(f"../output/data/{g.SIM_TYPE}/ifgs.npy")
+pix = np.load(f"../output/data/{g.SIM_TYPE}/pointing.npy")
 print("Loaded IFG and pointing data from disk.")
 
 if g.SIM_TYPE == "firas":
@@ -35,8 +38,8 @@ hit_map[mask] = hp.UNSEEN
 if g.PNG:
     hp.mollview(
         hit_map,
-        title="Scanning Strategy Hit Map",
-        unit="Hits",
+        title="Scanning strategy hit map",
+        unit="Number of hits over the full mission",
         min=0,
         max=hit_map.max(),
         xsize=2000,
@@ -59,7 +62,7 @@ np.add.at(m_ifg, pix, ifgs)
 data_density = np.bincount(pix, minlength=npix).astype(float)
 
 mask = data_density == 0
-np.divide(m_ifg, data_density, out=m_ifg, where=~mask)
+np.divide(m_ifg, data_density[:, np.newaxis], out=m_ifg, where=~mask[:, np.newaxis])
 m_ifg[mask] = np.nan
 
 m = np.fft.rfft(m_ifg, axis=1)
@@ -95,3 +98,5 @@ for nui in range(len(frequencies)):
 
 if g.PNG:
     print(f"Saved maps to ../output/binned/{g.SIM_TYPE}/ --------------------------------------------------")
+
+print(f"Total time for binned mapmaker: {_time() - t00:.2f} s")
