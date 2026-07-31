@@ -10,7 +10,6 @@ once, and uses around 400 - 500 GB at peak.
 import os
 import random
 import warnings
-from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
@@ -23,7 +22,6 @@ import globals as g
 import sims.dust_map as dust_map
 import sims.noise as noise
 import sims.scanning_strategy as ss
-import spectra
 import utils
 from argparser import args
 
@@ -42,9 +40,11 @@ if not os.path.exists(f"{g.DATA_DIR}/pointing.npy"):
     t0 = utils.log_step("create_pointings", t0, args.run_name)
 else:
     pix_ecl = np.load(g.DATA_DIR / "pointing.npy")
+    t0 = utils.log_step("load_pointing", t0, args.run_name)
     ecl_lon = np.load(g.DATA_DIR / "ecl_lon.npy")
+    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
     ecl_lat = np.load(g.DATA_DIR / "ecl_lat.npy")
-    t0 = utils.log_step("load_pointings", t0, args.run_name)
+    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
 
     if pix_ecl.ndim == 1:
         pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
@@ -54,27 +54,20 @@ t0 = utils.log_step("sim_dust", t0, args.run_name)
 # TODO: problem should be somewhere after here
 
 dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
-bb = spectra.planck(frequencies, temp=2.7)
 t0 = utils.log_step("planck + dust multiplication", t0, args.run_name)
 
-ifg = fft.irfft(dust - bb, axis=1)
+ifg = fft.irfft(dust, axis=1)
 t0 = utils.log_step("irfft", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
 t0 = utils.log_step("roll", t0, args.run_name)
 
 if args.plots == "debug":
-    # save maps for each frequency
-    # for nui in range(len(frequencies)):
-    #     hp.mollview(dust[:, nui], title=f"Spectral map at {frequencies[nui]:.2f} GHz",
-    #                 unit="MJy/sr", xsize=2000, coord=["E", "G"], min=0, max=50)
-    #     plt.savefig(g.DUST_MAP_DIR / f"{int(frequencies[nui]):04d}.png")
-    #     plt.close()
-    nworkers = min(args.nworkers, len(frequencies))
     args_list = [(frequencies[nui], dust[:, nui], g.DUST_MAP_DIR) for nui in range(len(frequencies))]
+    t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
 
-    with Pool(processes=nworkers) as pool:
-        pool.starmap(utils.save_maps, args_list)
+    for freq, dust_map_i, out_dir in args_list:
+        utils.save_maps(freq, dust_map_i, out_dir, write_png=True)
     print(f"Saved dust maps to {g.DUST_MAP_DIR}.")
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
 
@@ -127,8 +120,8 @@ if args.plots == "debug" or args.plots == "paper_only":
     print(f"Saved pixel hit map for IFG {n} to {g.PIX_HIT_DIR}.")
 
 # add white noise
-noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", signal=ifg_scanning,
-                                ifg=False)
+noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", args=args,
+                                 signal=ifg_scanning, ifg=False)
 t0 = utils.log_step("white_noise", t0, args.run_name)
 
 ifg_final = ifg_scanning + noise

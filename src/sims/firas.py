@@ -4,17 +4,26 @@ This means it assumes the FIRAS scanning speed, as well as the on-board coadding
 """
 
 import os
-import time
+from time import time as _time
 
-import h5py
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
-import sims.utils as sims
+import sims.dust_map as dust_map
+import sims.noise as noise
+import utils
+from argparser import args
 
-dust_map_downgraded_mjy, frequencies, sed = sims.sim_dust("firas")
+with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+    f.write("Profiling output for FIRAS simulation\n")
+    f.write("=" * 50 + "\n")
+
+t0 = _time()
+t00 = _time()
+
+dust_map_downgraded_mjy, frequencies, sed = dust_map.sim_dust("firas")
 sed = np.nan_to_num(sed)
 
 spec = dust_map_downgraded_mjy[:, np.newaxis] * sed[np.newaxis, :]
@@ -23,8 +32,6 @@ print(f"Shape of spec: {spec.shape}")
 ifg = np.fft.irfft(spec, axis=1)
 ifg = np.roll(ifg, 360, axis=1)
 ifg = ifg.real
-
-print(f"Shape of ifg: {ifg.shape}")
 
 user = os.environ["USER"]
 data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
@@ -48,8 +55,7 @@ speed = speed_deg_per_min / 60  # degrees per second
 ecl_lats = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=float)
 
 # Compute starting positions for each IFG
-t1 = time.time()
-print(f"Computing latitudes for all IFGs (vectorized)")
+t0 = utils.log_step("compute_starting_positions", t0, args.run_name)
 
 # Create arrays for IFG and pixel indices
 ifg_indices = np.arange(g.N_IFGS)  # shape: (N_IFGS,)
@@ -91,10 +97,8 @@ mask_high = ecl_lats > 90
 ecl_lats[mask_high] = 180 - ecl_lats[mask_high]
 ecl_lons[mask_high] = 180 - ecl_lons[mask_high]
 
-t2 = time.time()
-print(f"Time taken for computing the latitudes: {t2-t1} seconds")
+t0 = utils.log_step("compute_latitudes", t0, args.run_name)
 
-t1 = time.time()
 pix_ecl = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
 # Vectorized computation of pixel indices for all IFGs and pixels
 for ifg_i in range(g.N_IFGS):
@@ -107,15 +111,7 @@ for ifg_i in range(g.N_IFGS):
         ecl_lats[:, :, ifg_i],
         lonlat=True,
     )
-t2 = time.time()
-print(f"Time taken for computing the pixel indices: {t2-t1} seconds")
-
-# # save pix_ecl
-# np.save("../output/sim_firas/pix_ecl.npy", pix_ecl)
-# print("Saved pix_ecl to ../output/sim_firas/pix_ecl.npy")
-
-# print(f"Loading pix_ecl from ../output/sim_firas/pix_ecl.npy")
-# pix_ecl = np.load("../output/sim_firas/pix_ecl.npy")
+t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
 
 print("Saving hit map")
 npix = hp.nside2npix(g.NSIDE["firas"])
@@ -137,9 +133,9 @@ if g.FITS:
         overwrite=True,
         # dtype=np.float64,
     )
+t0 = utils.log_step("save_hit_map", t0, args.run_name)
 
 # Combine each of the 16 IFGs, filling all 512 points for each IFG
-t1 = time.time()
 ifgs = np.zeros((pix_ecl.shape[0], g.NPIXPERIFG["firas"], g.N_IFGS))  # 16 x npix x 512
 # Vectorized assignment to speed up frankensteining IFGs
 
@@ -151,8 +147,7 @@ for ifg_i in range(g.N_IFGS):
     # pix_ecl[ifg_i]: shape (num_pixels, npixperifg)
     # Use advanced indexing to assign all IFG values at once
     ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
-t2 = time.time()
-print(f"Time taken for frankensteining the IFGs: {t2-t1} seconds")
+t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
 
 # and lastly we add the 16 ifgs together
 total_ifg = np.sum(ifgs, axis=2)
@@ -181,7 +176,7 @@ fig = plt.figure(figsize=(16, 6))
 
 # Left panel: full-sky mollview
 ax1 = plt.subplot(1, 2, 1)
-hp.mollview(map_pix, title=f"Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
+hp.mollview(map_pix, title="Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
             max=g.N_IFGS * g.NPIXPERIFG["firas"], xsize=2000, coord="E", cmap="Reds", hold=True,
             sub=(1, 2, 1), format="%d")
 hp.projplot(
@@ -201,7 +196,7 @@ ax2 = plt.subplot(1, 2, 2)
 hp.gnomview(
     map_pix,
     rot=(ecl_lon[n], ecl_lat[n]),
-    title=f"Zoomed view (2° radius)",
+    title="Zoomed view (2° radius)",
     unit="Hits",
     min=0,
     # max=map_pix.max(),
@@ -234,7 +229,7 @@ plt.savefig(f"../output/sim_firas/pix_hits/{n}.png", dpi=150, bbox_inches="tight
 plt.close()
 
 # add white noise
-noise, sigma = sims.white_noise(total_ifg.shape[0], simtype="firas")
+noise, sigma = noise.white_noise(total_ifg.shape[0], simtype="firas")
 total_ifg = total_ifg + noise
 
-np.savez(f"../output/ifgs_firas.npz", ifg=total_ifg, pix=pix_ecl, sigma=sigma)
+np.savez("../output/ifgs_firas.npz", ifg=total_ifg, pix=pix_ecl, sigma=sigma)

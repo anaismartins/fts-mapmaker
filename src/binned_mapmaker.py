@@ -17,8 +17,9 @@ t00 = _time()
 t0 = _time()
 
 ifgs = np.load(f"../output/data/{g.SIM_TYPE}/ifgs.npy")
+t0 = utils.log_step("load_ifgs", t0, args.run_name)
 pix = np.load(f"../output/data/{g.SIM_TYPE}/pointing.npy")
-t0 = utils.log_step("load_ifgs_and_pointing", t0, args.run_name)
+t0 = utils.log_step("load_pointing", t0, args.run_name)
 
 if g.SIM_TYPE == "firas":
     ifgs = ifgs / g.N_IFGS
@@ -58,16 +59,15 @@ np.add.at(m_ifg, pix, ifgs)
 
 mask = hit_map == 0
 np.divide(m_ifg, hit_map[:, np.newaxis], out=m_ifg, where=~mask[:, np.newaxis])
+t0 = utils.log_step("divide_by_hit_map", t0, args.run_name)
 m_ifg[mask] = np.nan
-t0 = utils.log_step("bin_ifgs", t0, args.run_name)
+t0 = utils.log_step("set empty to nan", t0, args.run_name)
 
 m = np.fft.rfft(m_ifg, axis=1)
 t0 = utils.log_step("rfft", t0, args.run_name)
-# m_abs = np.abs(m)
+m_abs = m.real
 
 frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[g.SIM_TYPE], simtype=g.SIM_TYPE)
-bb = spectra.planck(frequencies, temp=2.7)
-m_abs = m + bb[np.newaxis, :]
 t0 = utils.log_step("bb_addition", t0, args.run_name)
 
 # save m as maps
@@ -77,8 +77,8 @@ for nui in range(len(frequencies)):
                      m_abs[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m_abs[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
-            min=0, max=50,
-            # norm='hist',
+            # min=0, max=50,
+            norm='hist',
             xsize=2000, coord=["E", "G"])
         plt.savefig(f"../output/binned/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.png")
         plt.close()
