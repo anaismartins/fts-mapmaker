@@ -53,16 +53,17 @@ dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
 t0 = utils.log_step("sim_dust", t0, args.run_name)
 # TODO: problem should be somewhere after here
 
-dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
-t0 = utils.log_step("planck + dust multiplication", t0, args.run_name)
-
-ifg = fft.irfft(dust, axis=1)
+sed_ifg = fft.irfft(sed)
 t0 = utils.log_step("irfft", t0, args.run_name)
+
+ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
+t0 = utils.log_step("multiply dust map", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
 t0 = utils.log_step("roll", t0, args.run_name)
 
 if args.plots == "debug":
+    dust = np.multiply.outer(dust_map_Mjy, sed)
     args_list = [(frequencies[nui], dust[:, nui], g.DUST_MAP_DIR) for nui in range(len(frequencies))]
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
 

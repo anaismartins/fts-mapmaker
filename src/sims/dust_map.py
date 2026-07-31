@@ -32,7 +32,8 @@ def sim_dust(simtype, t0=None, run_name=None):
         rot = hp.Rotator(coord=["G", "E"])
         m_ecl = rot.rotate_map_alms(dust_map_ring)
         # save
-        hp.write_map(f"../output/data/{simtype}/dust_map_ecl.fits", m_ecl, overwrite=True)
+        hp.write_map(f"../output/data/{simtype}/dust_map_ecl.fits", m_ecl, overwrite=True,
+                     dtype=np.float64)
         print("Saved dust map in ecliptic coordinates.")
     else:
         print("Loading dust map in ecliptic coordinates.")
@@ -48,7 +49,5 @@ def sim_dust(simtype, t0=None, run_name=None):
     frequencies = spectra.generate_frequencies(simtype, nfreq=g.SPEC_SIZE[simtype])
 
     signal = spectra.dust(frequencies * u.GHz, A_d, nu0_dust, beta_d, T_d).value
-    # check for invalid value encountered in divide
-    signal = np.nan_to_num(signal)
 
     return dust_map_Mjy, frequencies, signal

@@ -46,12 +46,17 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
         Dust SED in MJy/sr.
     """
     gamma = const.h / (const.k_B * T_d)
-    s_d = (
-        A_d
-        * (nu / nu_0) ** (beta_d + 1)
-        * (np.exp(gamma * nu_0) - 1)
-        / (np.exp(gamma * nu) - 1)
-    ).to(u.MJy / u.sr, equivalencies=u.brightness_temperature(nu_0))
+
+    if nu[0] == 0:
+        nu = nu[1:]
+        zero_included = True
+
+    s_d = np.zeros_like(nu)
+    s_d = (A_d * (nu / nu_0) ** (beta_d + 1) * (np.exp(gamma * nu_0) - 1) / (np.exp(gamma * nu) - 1)
+            ).to(u.MJy / u.sr, equivalencies=u.brightness_temperature(nu_0))
+
+    if zero_included:
+        s_d = np.insert(s_d, 0, 0)
 
     return s_d
 

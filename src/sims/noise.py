@@ -1,10 +1,11 @@
+import astropy.constants as const
+import astropy.units as u
 import numpy as np
-from astropy.io import fits
 
 import globals as g
 
 
-def white_noise(ntod, simtype, args, ifg=True, signal=None):
+def white_noise(ntod, simtype):
     """
     Generate white noise for the interferograms sampling the noise level from a uniform
     distribution.
@@ -15,11 +16,6 @@ def white_noise(ntod, simtype, args, ifg=True, signal=None):
         Number of interferograms.
     simtype : str
         Type of simulation, e.g. "fossil" or "firas".
-    ifg : bool
-        If True, generate noise for interferograms (IFG_SIZE). If False, generate noise for spectra
-        (SPEC_SIZE).
-    signal : array, optional
-        The signal array to determine the noise level.
     Returns
     -------
     noise : array
@@ -28,14 +24,13 @@ def white_noise(ntod, simtype, args, ifg=True, signal=None):
     sigma = None
     print(f"DEBUG: Number of TODs: {ntod}")
     
-    if not ifg:
-        if simtype == "fossil":
-            sigma = np.full(g.IFG_SIZE[simtype], 1e-6 * np.sqrt(ntod))
-        elif simtype == "firas":
-            firas_noise = fits.open("sims/FIRAS_CALIBRATION_ERRORS_LHSS.FITS")
-            print(firas_noise.info()) # TODO: check this and plot against calibration paper, figure 9
-            raise NotImplementedError("FIRAS noise model is not implemented yet.")
-
+    if simtype == "fossil":
+        sigma = np.full(g.IFG_SIZE[simtype], 1e-6 * np.sqrt(ntod))
+    elif simtype == "firas":
+        # from calibration paper
+        sigma_uerg = 0.1 * np.sqrt(93) * u.uerg / u.s / u.cm**2 / u.sr * u.cm / const.c
+        sigma_Mjy = (sigma_uerg.to(u.MJy / u.sr)).value
+        sigma = np.full(g.IFG_SIZE[simtype], sigma_Mjy)
     if sigma is None:
         raise ValueError("Could not derive noise sigma; check simtype/ifg configuration.")
 

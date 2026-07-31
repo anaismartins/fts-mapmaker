@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-run_name="firas_sim_v1"
-mode="debug" #"release"
+run_name="firas_sim_v12"
+mode="debug" # "release"
 
 owls=(owl{39..46}.uio.no)
 nworkers=(128 128 128 128 128 128 128 128)
@@ -22,12 +22,11 @@ export OPENBLAS_NUM_THREADS="$nworker"
 
 # Run the program; its output goes directly to the terminal
 if [ "$mode" = "release" ]; then
-    echo "Running in release mode with $nworker workers..."
+    echo "Running in release mode."
     python -m sims.firas
 else
-    echo "Running in debug mode with $nworker workers."
-    /usr/bin/time -v -o ../output/time_stats.txt \
-        python -u -m sims.firas --run-name "$run_name"
+    echo "Running in debug mode."
+    python -u -m sims.firas --run-name "$run_name" --plots "debug"
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."
