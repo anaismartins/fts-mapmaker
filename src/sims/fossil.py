@@ -57,7 +57,7 @@ dust = dust_map_Mjy[:, np.newaxis] * sed[np.newaxis, :]
 bb = spectra.planck(frequencies, temp=2.7)
 t0 = utils.log_step("planck + dust multiplication", t0, args.run_name)
 
-ifg = fft.irfft(dust)# - bb, axis=1)
+ifg = fft.irfft(dust - bb, axis=1)
 t0 = utils.log_step("irfft", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
 ifg = ifg.real
