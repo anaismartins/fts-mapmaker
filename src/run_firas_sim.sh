@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="firas_sim_v12"
+run_name="firas_sim_v14"
 mode="debug" # "release"
 
 owls=(owl{39..46}.uio.no)
@@ -26,7 +26,7 @@ if [ "$mode" = "release" ]; then
     python -m sims.firas
 else
     echo "Running in debug mode."
-    python -u -m sims.firas --run-name "$run_name" --plots "debug"
+    python -u -m sims.firas --run-name "$run_name" --plots "debug" --noise
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."

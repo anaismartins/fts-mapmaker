@@ -11,7 +11,7 @@ import utils
 
 
 def smooth_map(input_map):
-    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[g.SIM_TYPE])) * u.uK
+    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[args.sim_type])) * u.uK
 
     dust_map_Mjy = dust_map_smoothed.to(
         u.MJy / u.sr,

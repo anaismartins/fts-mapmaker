@@ -1,7 +1,5 @@
 from pathlib import Path
 
-SIM_TYPE = "fossil"  # "fossil" or "firas"
-
 IFG_SIZE = {}
 SPEC_SIZE = {}
 
@@ -40,7 +38,3 @@ FIRAS_CHANNELS = {"rh": 0, "rl": 1, "lh": 2, "ll": 3}
 ROOT_DIR = Path(__file__).resolve().parents[1]
 INPUT_DIR = ROOT_DIR / "input"
 OUTPUT_DIR = ROOT_DIR / "output"
-DUST_MAP_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "dust_maps"
-IFG_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "ifgs"
-PIX_HIT_DIR = OUTPUT_DIR / "sims" / SIM_TYPE / "pix_hits"
-DATA_DIR = OUTPUT_DIR / "data" / SIM_TYPE

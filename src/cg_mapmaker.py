@@ -18,6 +18,7 @@ import numpy as np
 
 import globals as g
 import utils
+from argparser import args
 
 
 def _save_mollview(map_data, output_path, **kwargs):
@@ -50,21 +51,21 @@ def calculate_b(d, pointing, sigma):
 
     b = np.zeros(
         (
-            g.NPIX[g.SIM_TYPE],
-            g.IFG_SIZE[g.SIM_TYPE],
+            g.NPIX[args.sim_type],
+            g.IFG_SIZE[args.sim_type],
         ),
         dtype=np.float64,
     )
     for pix_i in range(d.shape[0]):
         for x_i in range(d.shape[1]):
-            b[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += N_inv_d[
-                pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i
+            b[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += N_inv_d[
+                pix_i * g.IFG_SIZE[args.sim_type] + x_i
             ]
 
     return b.flatten()
 
 
-def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
+def A_dot_x(x, pointing, sigma, npix=g.NPIX[args.sim_type]):
     """
     Calculate the matrix-vector product A x = P^T N^{-1} P x.
 
@@ -83,15 +84,15 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
         The result of the matrix-vector product A x.
     """
 
-    x = x.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
+    x = x.reshape((npix, g.IFG_SIZE[args.sim_type]))
 
     Px = np.zeros(
-        (pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]),
+        (pointing.shape[0] // g.IFG_SIZE[args.sim_type], g.IFG_SIZE[args.sim_type]),
         dtype=np.float64,
     )
-    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
-        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
-            Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i]
+    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[args.sim_type]):
+        for x_i in range(g.IFG_SIZE[args.sim_type]):
+            Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i]
 
     # FPx = np.fft.rfft(Px, axis=1).flatten()
     # N_inv_Px = (FPx / sigma**2).reshape((Px.shape[0], g.SPEC_SIZE))
@@ -99,11 +100,11 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[g.SIM_TYPE]):
 
     # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
-    A_x = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=np.float64)
-    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
-        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
-            A_x[pointing[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += N_inv_Px[
-                pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i
+    A_x = np.zeros((npix, g.IFG_SIZE[args.sim_type]), dtype=np.float64)
+    for pix_i in range(pointing.shape[0] // g.IFG_SIZE[args.sim_type]):
+        for x_i in range(g.IFG_SIZE[args.sim_type]):
+            A_x[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += N_inv_Px[
+                pix_i * g.IFG_SIZE[args.sim_type] + x_i
             ]
 
     return A_x.flatten()
@@ -117,7 +118,7 @@ def preconditioned_conjugate_gradient(
     x=None,
     maxiter=1000,
     tol=1e-10,
-    npix=g.NPIX[g.SIM_TYPE],
+    npix=g.NPIX[args.sim_type],
     save_path=None,
 ):
     if x is None:
@@ -183,11 +184,11 @@ def preconditioned_conjugate_gradient(
         if delta_new < tol**2 * delta0:
             break
 
-        print(f"DEBUG: npix: {npix} and IFG_SIZE: {g.IFG_SIZE[g.SIM_TYPE]}")            
-        y = x.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
+        print(f"DEBUG: npix: {npix} and IFG_SIZE: {g.IFG_SIZE[args.sim_type]}")            
+        y = x.reshape((npix, g.IFG_SIZE[args.sim_type]))
         m = np.abs(np.fft.rfft(y, axis=1))
 
-        r2 = r.reshape((npix, g.IFG_SIZE[g.SIM_TYPE]))
+        r2 = r.reshape((npix, g.IFG_SIZE[args.sim_type]))
 
         print(f"Plotting intermediate results for iteration {i}...")
 
@@ -232,7 +233,7 @@ if __name__ == "__main__":
 
     t1 = time.time()
     print("Initializing CG mapmaker...")
-    data = np.load(f"../output/ifgs_{g.SIM_TYPE}.npz")
+    data = np.load(f"../output/{args.sim_type}/ifgs.npy")
     ifgs = data["ifg"]
     pix = data["pix"]
     sigma = data["sigma"]
@@ -243,7 +244,7 @@ if __name__ == "__main__":
     # Use ThreadPoolExecutor for parallel processing
     max_workers = min(ifgs.shape[1], max_threads)  # Adjust number of threads as needed
 
-    if g.SIM_TYPE == "firas":
+    if args.sim_type == "firas":
         ifgs = ifgs / g.N_IFGS
     ifgs = np.roll(ifgs, -360, axis=1)
     print(f"shape of ifgs before flatten: {ifgs.shape}")
@@ -256,12 +257,12 @@ if __name__ == "__main__":
     print(f"shape of pix after flatten: {pix.shape}")
 
     print(f"shape of sigma before flatten: {sigma.shape}")
-    if g.SIM_TYPE == "fossil":
-        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE[g.SIM_TYPE])).flatten()
-    elif g.SIM_TYPE == "firas":
-        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE[g.SIM_TYPE], g.N_IFGS))).flatten()
+    if args.sim_type == "fossil":
+        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE[args.sim_type])).flatten()
+    elif args.sim_type == "firas":
+        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE[args.sim_type], g.N_IFGS))).flatten()
     else:
-        raise ValueError("Unknown SIM_TYPE")
+        raise ValueError("sim_type must be 'fossil' or 'firas'")
     print(f"shape of sigma after flatten: {sigma.shape}")
         
 
@@ -289,25 +290,25 @@ if __name__ == "__main__":
     print(f"Starting conjugate gradient solver...")
 
     # set M to be the hits map
-    print("NPIX: ", g.NPIX[g.SIM_TYPE])
-    hits_map = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
-    for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
-        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
-            hits_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += 1
+    print("NPIX: ", g.NPIX[args.sim_type])
+    hits_map = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE[args.sim_type]):
+        for x_i in range(g.IFG_SIZE[args.sim_type]):
+            hits_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += 1
     hits_map = hits_map.flatten()
 
-    rms_map = np.zeros((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
-    for pix_i in range(pix.shape[0] // g.IFG_SIZE[g.SIM_TYPE]):
-        for x_i in range(g.IFG_SIZE[g.SIM_TYPE]):
-            rms_map[pix[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i], x_i] += (
-                1 / sigma[pix_i * g.IFG_SIZE[g.SIM_TYPE] + x_i] ** 2
+    rms_map = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
+    for pix_i in range(pix.shape[0] // g.IFG_SIZE[args.sim_type]):
+        for x_i in range(g.IFG_SIZE[args.sim_type]):
+            rms_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += (
+                1 / sigma[pix_i * g.IFG_SIZE[args.sim_type] + x_i] ** 2
             )
     rms_map = np.sqrt(rms_map.flatten())
 
     x0 = np.zeros_like(b)
-    for i in range(g.IFG_SIZE[g.SIM_TYPE]):
-        x0[g.NPIX[g.SIM_TYPE] * i : g.NPIX[g.SIM_TYPE] * (i + 1)] = hp.read_map(
-            f"../output/white_noise_mapmaker/{g.SIM_TYPE}/ifg_maps/ifg_{i:04d}.fits"
+    for i in range(g.IFG_SIZE[args.sim_type]):
+        x0[g.NPIX[args.sim_type] * i : g.NPIX[args.sim_type] * (i + 1)] = hp.read_map(
+            f"../output/white_noise_mapmaker/{args.sim_type}/ifg_maps/ifg_{i:04d}.fits"
         )
 
     # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
@@ -315,19 +316,19 @@ if __name__ == "__main__":
         b, pix, sigma, rms_map, x=x0, save_path="../output/cg/"
     )
 
-    x = x.reshape((g.NPIX[g.SIM_TYPE], g.IFG_SIZE[g.SIM_TYPE]))
+    x = x.reshape((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
     m = np.abs(np.fft.rfft(x, axis=1))
     t2 = time.time()
     print(f"Finished CG mapmaking in {int((t2 - t1)/60)} minutes.")
     print("Finished CG mapmaking, saving to disk...")
 
     # use the solution of the white noise mapmaker as x0
-    if g.SIM_TYPE == "fossil":
+    if args.sim_type == "fossil":
         nfreq = 129
-    elif g.SIM_TYPE == "firas":
+    elif args.sim_type == "firas":
         nfreq = 257
     else:
-        raise ValueError("Unknown SIM_TYPE")
+        raise ValueError("Unknown sim_type")
     frequencies = utils.generate_frequencies(nfreq=nfreq)
 
     t1 = time.time()

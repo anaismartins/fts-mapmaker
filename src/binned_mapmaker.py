@@ -16,25 +16,25 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t00 = _time()
 t0 = _time()
 
-ifgs = np.load(f"../output/data/{g.SIM_TYPE}/ifgs.npy")
+ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy")
 t0 = utils.log_step("load_ifgs", t0, args.run_name)
-pix = np.load(f"../output/data/{g.SIM_TYPE}/pointing.npy")
+pix = np.load(f"../output/data/{args.sim_type}/pointing.npy")
 t0 = utils.log_step("load_pointing", t0, args.run_name)
 
-if g.SIM_TYPE == "firas":
+if args.sim_type == "firas":
     ifgs = ifgs / g.N_IFGS
 
 # use only the middle pixel
-if g.SIM_TYPE == "fossil":
-    pix = pix[:, g.NPIXPERIFG[g.SIM_TYPE] // 2]
-elif g.SIM_TYPE == "firas":
-    pix = pix[:, g.NPIXPERIFG[g.SIM_TYPE] // 2, g.N_IFGS // 2]
+if args.sim_type == "fossil":
+    pix = pix[:, g.NPIXPERIFG[args.sim_type] // 2]
+elif args.sim_type == "firas":
+    pix = pix[:, g.NPIXPERIFG[args.sim_type] // 2, g.N_IFGS // 2]
 else:
-    raise ValueError("g.SIM_TYPE must be 'fossil' or 'firas'")
+    raise ValueError("args.sim_type must be 'fossil' or 'firas'")
 t0 = utils.log_step("select_middle_pixel", t0, args.run_name)
 
 # plot hit map of the scanning strategy
-npix = g.NPIX[g.SIM_TYPE]
+npix = g.NPIX[args.sim_type]
 hit_map = np.bincount(pix, minlength=npix).astype(float)
 mask = hit_map == 0
 hit_map[mask] = hp.UNSEEN
@@ -43,7 +43,7 @@ if g.PNG:
     hp.mollview(hit_map, title="Scanning strategy hit map",
                 unit="Number of hits over the full mission", min=0, max=hit_map.max(), xsize=2000,
                 coord=["E", "G"])
-    plt.savefig("../output/hit_maps/binned.png")
+    plt.savefig(f"../output/hit_maps/binned_{args.sim_type}.png")
     plt.close()
 
     print("Saved hit map of the scanning strategy to ../output/hit_maps/binned.png.")
@@ -52,7 +52,7 @@ t0 = utils.log_step("plot_hit_map", t0, args.run_name)
 
 pix = pix.astype(np.int64, copy=False)
 
-m_ifg = np.zeros((npix, g.IFG_SIZE[g.SIM_TYPE]), dtype=float)
+m_ifg = np.zeros((npix, g.IFG_SIZE[args.sim_type]), dtype=float)
 
 # Vectorized accumulation is much faster than looping in Python.
 np.add.at(m_ifg, pix, ifgs)
@@ -67,25 +67,25 @@ m = np.fft.rfft(m_ifg, axis=1)
 t0 = utils.log_step("rfft", t0, args.run_name)
 m_abs = m.real
 
-frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[g.SIM_TYPE], simtype=g.SIM_TYPE)
+frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], simtype=args.sim_type)
 t0 = utils.log_step("bb_addition", t0, args.run_name)
 
 # save m as maps
 for nui in range(len(frequencies)):
     if g.FITS:
-        hp.write_map(f"../output/binned/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.fits",
+        hp.write_map(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.fits",
                      m_abs[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m_abs[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
             # min=0, max=50,
             norm='hist',
             xsize=2000, coord=["E", "G"])
-        plt.savefig(f"../output/binned/{g.SIM_TYPE}/{int(frequencies[nui]):04d}.png")
+        plt.savefig(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.png")
         plt.close()
         plt.clf()
 
 if g.PNG:
-    print(f"Saved maps to ../output/binned/{g.SIM_TYPE}/.")
+    print(f"Saved maps to ../output/binned/{args.sim_type}/.")
     t0 = utils.log_step("save_maps", t0, args.run_name)
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:

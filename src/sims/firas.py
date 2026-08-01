@@ -35,7 +35,6 @@ t0 = utils.log_step("multiply dust map", t0, args.run_name)
 ifg = np.roll(ifg, 360, axis=1)
 ifg = ifg.real
 
-
 user = os.environ["USER"]
 data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
 sky_data = np.load(data_path, allow_pickle=True)
@@ -196,9 +195,11 @@ if args.plots == "debug" or args.plots == "paper_only":
     print(f"Saved pixel hit map for IFG {n} to ../output/sims/firas/pix_hits/{n}.png.")
 
 # add white noise
-noise, sigma = noise.white_noise(total_ifg.shape[0], simtype="firas")
-total_ifg = total_ifg + noise
-if args.plots == "debug":
+if args.noise:
+    noise, sigma = noise.white_noise(total_ifg.shape[0], simtype="firas")
+    total_ifg = total_ifg + noise
+
+if args.plots == "debug" and args.noise:
     plt.plot(total_ifg[n], alpha=0.5, label="Signal + Noise")
     plt.plot(np.sum(ifgs[n], axis=1), alpha=0.5, label="Signal")
     plt.plot(noise[n], alpha=0.5, label="Noise")
@@ -210,7 +211,9 @@ if args.plots == "debug":
     print(f"Saved IFG {n} with noise to ../output/sims/firas/ifgs/{n}_with_noise.png.")
 
 np.save("../output/data/firas/ifgs.npy", total_ifg)
-print("Saved FIRAS IFGs and pixel indices to ../output/data/firas/.")
+if args.noise:
+    np.save("../output/data/firas/noise.npy", noise)
+print("Saved FIRAS IFGs to ../output/data/firas/.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write("=" * 50 + "\n")

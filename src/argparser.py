@@ -11,4 +11,6 @@ parser.add_argument("--nworkers", type=int, default=None, help="Override the num
 parser.add_argument("--run-name", type=str, default="profiling.txt", help="Name of the run for "
                     "profiling output.")
 parser.add_argument("--noise", action="store_false", help="Add no noise to the simulated IFGs.")
+parser.add_argument("--sim-type", type=str, help="Type of simulation to run." \
+                    "Options are: 'fossil', 'firas'. One of the options must be specified.")
 args = parser.parse_args()

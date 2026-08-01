@@ -5,9 +5,10 @@ import sys
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
+from sims.utils import sim_dust
 
 import globals as g
-from sims.utils import sim_dust
+from argparser import args
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -29,31 +30,25 @@ def plot_ifgs(ifg):
 
 def plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal):
     # clean previous maps
-    for file in os.listdir(f"../output/dust_maps/{g.SIM_TYPE}"):
-        os.remove(f"../output/dust_maps/{g.SIM_TYPE}/{file}")
+    for file in os.listdir(f"../output/dust_maps/{args.sim_type}"):
+        os.remove(f"../output/dust_maps/{args.sim_type}/{file}")
     # plot map for each frequency
     dust_map = dust_map_downgraded_mjy[:, np.newaxis] * signal[np.newaxis, :]
     for i, frequency in enumerate(frequencies):
         logging.info(f"Plotting dust map for frequency {i}")
         # dust_map = dust_map_downgraded_mjy * signal[i]
         if g.PNG:
-            hp.mollview(
-                dust_map[:, i],
-                title=f"{int(frequency):04d} GHz",
-                unit="MJy/sr",
-                min=0,
-                max=50,
-                coord=["E", "G"],
-            )
+            hp.mollview(dust_map[:, i], title=f"{int(frequency):04d} GHz", unit="MJy/sr", min=0,
+                        max=50, coord=["E", "G"])
             try:
-                plt.savefig(f"../output/dust_maps/{g.SIM_TYPE}/{int(frequency):04d}.png")
+                plt.savefig(f"../output/dust_maps/{args.sim_type}/{int(frequency):04d}.png")
                 plt.close()
             except Exception as e:
                 logging.error(
                     f"Failed to save plot for frequency {int(frequency):04d}: {e}"
                 )
         if g.FITS:
-            output_file = f"../output/dust_maps/{g.SIM_TYPE}/{int(frequency):04d}.fits"
+            output_file = f"../output/dust_maps/{args.sim_type}/{int(frequency):04d}.fits"
             if os.path.exists(output_file):
                 logging.warning(f"Overwriting existing file: {output_file}")
             hp.write_map(output_file, dust_map[:, i], overwrite=True)
@@ -140,7 +135,7 @@ if __name__ == "__main__":
     # ifg = np.load("test_output/ifgs.npz")['ifg']
     # plot_ifgs(ifg)
 
-    dust_map_downgraded_mjy, frequencies, signal = sim_dust(simtype=g.SIM_TYPE)
+    dust_map_downgraded_mjy, frequencies, signal = sim_dust(simtype=args.sim_type)
 
     plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal)
     # # plot_m_invert(frequencies)
