@@ -209,8 +209,8 @@ if args.plots == "debug":
     plt.close()
     print(f"Saved IFG {n} with noise to ../output/sims/firas/ifgs/{n}_with_noise.png.")
 
-np.savez("../output/ifgs_firas.npz", ifg=total_ifg, pix=pix_ecl, sigma=sigma)
-print("Saved FIRAS IFGs and pixel indices to ../output/ifgs_firas.npz.")
+np.save("../output/data/firas/ifgs.npy", total_ifg)
+print("Saved FIRAS IFGs and pixel indices to ../output/data/firas/.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write("=" * 50 + "\n")

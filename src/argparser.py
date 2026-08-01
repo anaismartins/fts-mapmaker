@@ -10,4 +10,5 @@ parser.add_argument("--nworkers", type=int, default=None, help="Override the num
                     "processes used for scanning batches.")
 parser.add_argument("--run-name", type=str, default="profiling.txt", help="Name of the run for "
                     "profiling output.")
+parser.add_argument("--noise", action="store_false", help="Add no noise to the simulated IFGs.")
 args = parser.parse_args()

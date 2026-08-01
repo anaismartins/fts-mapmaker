@@ -39,15 +39,16 @@ if not os.path.exists(f"{g.DATA_DIR}/pointing.npy"):
     pix_ecl, ecl_lon, ecl_lat = ss.create_pointings(args)
     t0 = utils.log_step("create_pointings", t0, args.run_name)
 else:
-    pix_ecl = np.load(g.DATA_DIR / "pointing.npy")
+    # Memory-map cached arrays so loading is near-instant for large files.
+    pix_ecl = np.load(g.DATA_DIR / "pointing.npy", mmap_mode="r")
     t0 = utils.log_step("load_pointing", t0, args.run_name)
-    ecl_lon = np.load(g.DATA_DIR / "ecl_lon.npy")
-    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-    ecl_lat = np.load(g.DATA_DIR / "ecl_lat.npy")
-    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
 
-    if pix_ecl.ndim == 1:
-        pix_ecl = np.array(np.split(pix_ecl, ecl_lon.shape[0]))
+    # lon/lat are only required for debug/paper plots.
+    if args.plots == "debug" or args.plots == "paper_only":
+        ecl_lon = np.load(g.DATA_DIR / "ecl_lon.npy", mmap_mode="r")
+        t0 = utils.log_step("load ecl_lon", t0, args.run_name)
+        ecl_lat = np.load(g.DATA_DIR / "ecl_lat.npy", mmap_mode="r")
+        t0 = utils.log_step("load ecl_lat", t0, args.run_name)
     
 dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
 t0 = utils.log_step("sim_dust", t0, args.run_name)
@@ -59,8 +60,9 @@ t0 = utils.log_step("irfft", t0, args.run_name)
 ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
 t0 = utils.log_step("multiply dust map", t0, args.run_name)
 ifg = np.roll(ifg, 180, axis=1)
-ifg = ifg.real
 t0 = utils.log_step("roll", t0, args.run_name)
+ifg = ifg.real
+t0 = utils.log_step("real", t0, args.run_name)
 
 if args.plots == "debug":
     dust = np.multiply.outer(dust_map_Mjy, sed)
@@ -121,13 +123,17 @@ if args.plots == "debug" or args.plots == "paper_only":
     print(f"Saved pixel hit map for IFG {n} to {g.PIX_HIT_DIR}.")
 
 # add white noise
-noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", args=args,
-                                 signal=ifg_scanning, ifg=False)
-t0 = utils.log_step("white_noise", t0, args.run_name)
+if args.noise:
+    noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", args=args,
+                                    signal=ifg_scanning, ifg=False)
+    t0 = utils.log_step("white_noise", t0, args.run_name)
 
-ifg_final = ifg_scanning + noise
+if args.noise:
+    ifg_final = ifg_scanning + noise
+else:
+    ifg_final = ifg_scanning
 
-if args.plots == "debug":
+if args.plots == "debug" and args.noise:
     plt.plot(ifg_final[n], alpha=0.5, label="Signal + Noise")
     plt.plot(ifg_scanning[n], alpha=0.5, label="Signal")
     plt.plot(noise[n], alpha=0.5, label="Noise")
@@ -144,7 +150,8 @@ if args.plots == "debug":
 
 
 np.save(f"{g.DATA_DIR}/ifgs.npy", ifg_final)
-np.save(f"{g.DATA_DIR}/noise.npy", sigma)
+if args.noise:
+    np.save(f"{g.DATA_DIR}/noise.npy", sigma)
 print(f"Saved IFGs, pixel indices, and noise to {g.DATA_DIR}.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:

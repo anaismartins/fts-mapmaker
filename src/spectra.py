@@ -47,6 +47,7 @@ def dust(nu, A_d, nu_0, beta_d, T_d):
     """
     gamma = const.h / (const.k_B * T_d)
 
+    zero_included = False
     if nu[0] == 0:
         nu = nu[1:]
         zero_included = True

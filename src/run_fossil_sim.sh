@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="fossil_sim_v21_check_save_dust_maps_time"
+run_name="fossil_sim_v25"
 mode="debug" #"release"
 
 owls=(owl{39..46}.uio.no)
@@ -27,7 +27,8 @@ if [ "$mode" = "release" ]; then
 else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
-        python -u -m sims.fossil --nworkers "$nworker" --run-name "$run_name" --plots "debug"
+        python -u -m sims.fossil --nworkers "$nworker" --run-name "$run_name" --plots "debug" \
+        --noise
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."
