@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="fossil_sim_v25"
+run_name="fossil_sim_v27"
 mode="debug" #"release"
 
 owls=(owl{39..46}.uio.no)
@@ -28,7 +28,7 @@ else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
         python -u -m sims.fossil --nworkers "$nworker" --run-name "$run_name" --plots "debug" \
-        --noise
+        --noise --sim-type "fossil"
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."

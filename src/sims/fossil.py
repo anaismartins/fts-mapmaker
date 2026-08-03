@@ -35,20 +35,16 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 
 t0 = _time()
 t00 = _time()
-if not os.path.exists(f"{g.DATA_DIR}/pointing.npy"):
-    pix_ecl, ecl_lon, ecl_lat = ss.create_pointings(args)
+
+data_dir = "../output/data/fossil"
+if not os.path.exists(f"{data_dir}/pointing.npy"):
+    ecl_lon, ecl_lat = ss.create_pointings(args)
     t0 = utils.log_step("create_pointings", t0, args.run_name)
 else:
-    # Memory-map cached arrays so loading is near-instant for large files.
-    pix_ecl = np.load(g.DATA_DIR / "pointing.npy", mmap_mode="r")
-    t0 = utils.log_step("load_pointing", t0, args.run_name)
-
-    # lon/lat are only required for debug/paper plots.
-    if args.plots == "debug" or args.plots == "paper_only":
-        ecl_lon = np.load(g.DATA_DIR / "ecl_lon.npy", mmap_mode="r")
-        t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-        ecl_lat = np.load(g.DATA_DIR / "ecl_lat.npy", mmap_mode="r")
-        t0 = utils.log_step("load ecl_lat", t0, args.run_name)
+    ecl_lon = np.load(f"{data_dir}/ecl_lon.npy", mmap_mode="r")
+    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
+    ecl_lat = np.load(f"{data_dir}/ecl_lat.npy", mmap_mode="r")
+    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
     
 dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
 t0 = utils.log_step("sim_dust", t0, args.run_name)
@@ -66,16 +62,21 @@ t0 = utils.log_step("real", t0, args.run_name)
 
 if args.plots == "debug":
     dust = np.multiply.outer(dust_map_Mjy, sed)
-    args_list = [(frequencies[nui], dust[:, nui], g.DUST_MAP_DIR) for nui in range(len(frequencies))]
+
+    dust_map_dir = "../output/data/fossil/dust_maps"
+    args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
 
     for freq, dust_map_i, out_dir in args_list:
         utils.save_maps(freq, dust_map_i, out_dir, write_png=True)
-    print(f"Saved dust maps to {g.DUST_MAP_DIR}.")
+    print(f"Saved dust maps to {dust_map_dir}.")
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
 
 # now we frankenstein the IFGs together
-col_idx = np.arange(pix_ecl.shape[1])
+# col_idx = np.arange(pix_ecl.shape[1])
+# get the pixel at the NSIDE that the dust map is at for each IFG
+nside_dust = hp.get_nside(dust_map_Mjy)
+print(f"NSIDE of dust map: {nside_dust}")
 ifg_scanning = ifg[pix_ecl, col_idx]
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
 

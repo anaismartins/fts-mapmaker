@@ -8,6 +8,7 @@ from astropy.io import fits
 import globals as g
 import spectra
 import utils
+from argparser import args
 
 
 def smooth_map(input_map):

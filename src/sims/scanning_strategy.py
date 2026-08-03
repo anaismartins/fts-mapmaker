@@ -14,10 +14,8 @@ import numpy as np
 from astropy.coordinates import get_sun
 from astropy.time import Time
 from erfa import ErfaWarning
-from memory_profiler import profile
 
 import globals as g
-import utils
 
 # Suppress ERFA warnings about dubious year for future dates
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -116,7 +114,7 @@ def calculate_batch(batch_idx,
     los_vec = los_cos * s_vec + los_sin * (spin_cos * u_vec + spin_sin * v_vec)
 
     # convert pointing vectors to spherical coordinates
-    lon, lat = hp.vec2ang(los_vec, True)
+    lon, lat = hp.vec2ang(los_vec, lonlat=True)
     pix = hp.ang2pix(g.NSIDE["fossil"], lon, lat, lonlat=True)
 
     if verbose:
@@ -130,11 +128,10 @@ def calculate_batch(batch_idx,
             overwrite=True,
         )
 
-    pix = np.array(np.split(pix, num_ifgs))
     lon = np.array(np.split(lon, num_ifgs))
     lat = np.array(np.split(lat, num_ifgs))
 
-    return pix, lon, lat
+    return lon, lat
 
 def available_cpu_count():
     if hasattr(os, "sched_getaffinity"):
@@ -160,17 +157,16 @@ def create_pointings(args):
     # Combine results
     print("Combining results from all batches...")
     # extract pix from results
-    pix_list, lon_list, lat_list = zip(*results)
-    pix_ecl = np.concatenate(pix_list)
+    lon_list, lat_list = zip(*results)
     ecl_lon = np.concatenate(lon_list)
     ecl_lat = np.concatenate(lat_list)
 
     # save all pointings
-    np.save(g.DATA_DIR / "pointing.npy", pix_ecl)
-    np.save(g.DATA_DIR / "ecl_lon.npy", ecl_lon)
-    np.save(g.DATA_DIR / "ecl_lat.npy", ecl_lat)
+    data_dir = "../output/data/fossil"
+    np.save(f"{data_dir}/ecl_lon.npy", ecl_lon)
+    np.save(f"{data_dir}/ecl_lat.npy", ecl_lat)
     print("Saved pointings.")
-    return pix_ecl, ecl_lon, ecl_lat
+    return ecl_lon, ecl_lat
 
 if __name__ == "__main__":
     # test splitting into IFGs and generating hit map

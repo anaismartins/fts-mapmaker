@@ -16,14 +16,17 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t00 = _time()
 t0 = _time()
 
-ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy")
+ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy", mmap_mode="r")
 t0 = utils.log_step("load_ifgs", t0, args.run_name)
-pix = np.load(f"../output/data/{args.sim_type}/pointing.npy")
+ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
+ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
 t0 = utils.log_step("load_pointing", t0, args.run_name)
 
 if args.sim_type == "firas":
     ifgs = ifgs / g.N_IFGS
 
+pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
+t0 = utils.log_step("ang2pix", t0, args.run_name)
 # use only the middle pixel
 if args.sim_type == "fossil":
     pix = pix[:, g.NPIXPERIFG[args.sim_type] // 2]
@@ -46,7 +49,7 @@ if g.PNG:
     plt.savefig(f"../output/hit_maps/binned_{args.sim_type}.png")
     plt.close()
 
-    print("Saved hit map of the scanning strategy to ../output/hit_maps/binned.png.")
+    print(f"Saved hit map of the scanning strategy to ../output/hit_maps/binned_{args.sim_type}.png.")
 t0 = utils.log_step("plot_hit_map", t0, args.run_name)
 
 
