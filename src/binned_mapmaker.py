@@ -80,8 +80,8 @@ for nui in range(len(frequencies)):
                      m_abs[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m_abs[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
-            # min=0, max=50,
-            norm='hist',
+            min=0, max=50,
+            # norm='hist',
             xsize=2000, coord=["E", "G"])
         plt.savefig(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.png")
         plt.close()
