@@ -216,7 +216,7 @@ np.save("../output/data/firas/ifgs.npy", total_ifg)
 np.save("../output/data/firas/ecl_lat.npy", ecl_lats)
 np.save("../output/data/firas/ecl_lon.npy", ecl_lons)
 if args.noise:
-    np.save("../output/data/firas/noise.npy", noise)
+    np.save("../output/data/firas/noise.npy", sigma)
 print("Saved FIRAS IFGs to ../output/data/firas/.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:

@@ -26,7 +26,6 @@ if args.sim_type == "firas":
     ifgs = ifgs / g.N_IFGS
 
 t0 = utils.log_step("ang2pix", t0, args.run_name)
-pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
 
 # use only the middle pixel
 t0 = utils.log_step("select_middle_pixel", t0, args.run_name)

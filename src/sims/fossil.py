@@ -10,6 +10,7 @@ once, and uses around 400 - 500 GB at peak.
 import os
 import random
 import warnings
+from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
@@ -61,19 +62,23 @@ if args.plots == "debug":
     args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
 
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
-    for freq, dust_map_i, out_dir in args_list:
-        utils.save_maps(freq, dust_map_i, out_dir, write_png=True)
+    with Pool(processes=args.nworkers) as pool:
+        list(pool.imap_unordered(utils._save_one_map, args_list))
     print(f"Saved dust maps to {dust_map_dir}.")
 
 # now we frankenstein the IFGs together
+t0 = utils.log_step("prepare shift", t0, args.run_name)
 n_cols = sed_ifg.shape[0]
 col_idx = (np.arange(n_cols) + 180) % n_cols
 sed_ifg_shifted = sed_ifg[col_idx]
 
 # col_idx = np.arange(pix_ecl.shape[1])
 # get the pixel at the NSIDE that the dust map is at for each IFG
+t0 = utils.log_step("get nside", t0, args.run_name)
 nside_dust = hp.get_nside(dust_map_Mjy)
+t0 = utils.log_step("ang2pix dust", t0, args.run_name)
 pix_ecl = hp.ang2pix(nside_dust, ecl_lon, ecl_lat, lonlat=True)
+t0 = utils.log_step("ang2pix fossil", t0, args.run_name)
 pix_ecl_fossil = hp.ang2pix(g.NSIDE["fossil"], ecl_lon, ecl_lat, lonlat=True)
 
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
@@ -106,7 +111,7 @@ if args.plots == "debug" or args.plots == "paper_only":
     map_pix = np.bincount(row_pix, minlength=npix)
     vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
-    hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="RdYlGn", min=0, max=vmax, hold=True)
+    hp.mollview(map_pix, coord=["E", "G"], title="Pixels hit", cmap="RdYlGn", min=0, max=vmax, hold=True)
     hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
@@ -129,8 +134,7 @@ if args.plots == "debug" or args.plots == "paper_only":
 # add white noise
 if args.noise:
     t0 = utils.log_step("white_noise", t0, args.run_name)
-    noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", args=args,
-                                    signal=ifg_scanning, ifg=False)
+    noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil")
 
 if args.noise:
     ifg_final = ifg_scanning + noise

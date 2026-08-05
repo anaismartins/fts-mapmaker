@@ -2,11 +2,14 @@
 
 set -euo pipefail
 
-sim_type="firas"
-run_name="binned_${sim_type}_v6"
+sim_type="fossil"
+mapmaker_type="white_noise"
+version="v8"
 
-python binned_mapmaker.py --run-name "$run_name" --sim-type "$sim_type"
+run_name="${mapmaker_type}_${sim_type}_${version}"
 
-cd ../output/binned/${sim_type}
+python ${mapmaker_type}_mapmaker.py --run-name "$run_name" --sim-type "$sim_type"
+
+cd ../output/${mapmaker_type}/${sim_type}
 echo "Creating GIF from PNG files..."
-convert *.png -delay 20 -loop 0 binned_${sim_type}.gif
+convert *.png -delay 20 -loop 0 ${mapmaker_type}_${sim_type}.gif
