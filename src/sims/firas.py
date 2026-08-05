@@ -19,26 +19,28 @@ from argparser import args
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FIRAS simulation\n")
     f.write("=" * 50 + "\n")
+    label = "sim dust"
+    f.write(f"{label:<35} | ")
 
 t0 = _time()
 t00 = _time()
 
 dust_map_downgraded_mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
 sed = np.nan_to_num(sed)
-t0 = utils.log_step("sim_dust", t0, args.run_name)
 
-sed_ifg = np.fft.irfft(sed)
 t0 = utils.log_step("irfft", t0, args.run_name)
+sed_ifg = np.fft.irfft(sed, norm="ortho")
 
-ifg = np.multiply.outer(dust_map_downgraded_mjy, sed_ifg)
 t0 = utils.log_step("multiply dust map", t0, args.run_name)
+ifg = np.multiply.outer(dust_map_downgraded_mjy, sed_ifg)
+
 ifg = np.roll(ifg, 360, axis=1)
 ifg = ifg.real
 
+t0 = utils.log_step("load_sky_data", t0, args.run_name)
 user = os.environ["USER"]
 data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
 sky_data = np.load(data_path, allow_pickle=True)
-t0 = utils.log_step("load_sky_data", t0, args.run_name)
 
 mtm_speed = sky_data["mtm_speed"][:]
 mtm_length = sky_data["mtm_length"][:]
@@ -54,8 +56,8 @@ time_per_ifg_on_source = time_per_ifg - flyback_time  # seconds
 speed_deg_per_min = 3.5
 speed = speed_deg_per_min / 60  # degrees per second
 
-ecl_lats = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=float)
 t0 = utils.log_step("initialize_arrays", t0, args.run_name)
+ecl_lats = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=float)
 
 # Create arrays for IFG and pixel indices
 ifg_indices = np.arange(g.N_IFGS)  # shape: (N_IFGS,)
@@ -72,17 +74,12 @@ flyback_offset = speed * flyback_time * ifg_grid
 time_offset = speed * time_per_ifg_on_source * ifg_grid
 pix_offset = speed * time_per_ifg_on_source * pix_grid / g.NPIXPERIFG["firas"]
 
+t0 = utils.log_step("compute_latitudes", t0, args.run_name)
 # Broadcast ecl_lat to match the shape (N_ecl_lat, 1, 1)
 ecl_lat_broadcast = ecl_lat[:, np.newaxis, np.newaxis]
 
 # Compute all latitudes at once
-ecl_lats = (
-    ecl_lat_broadcast
-    - start_offset
-    + flyback_offset
-    + time_offset
-    + pix_offset
-)
+ecl_lats = ecl_lat_broadcast - start_offset + flyback_offset + time_offset + pix_offset
 
 # make ecl_lons have the same shape as ecl_lats. ecl_lon now has shape of the number of recorded IFGs
 # we want it to have shape (that, npixperifg, n_ifgs) as ecl_lats with copies of the longitudes along the second and third dimensions
@@ -96,22 +93,25 @@ mask_high = ecl_lats > 90
 ecl_lats[mask_high] = 180 - ecl_lats[mask_high]
 ecl_lons[mask_high] = 180 - ecl_lons[mask_high]
 
-t0 = utils.log_step("compute_latitudes", t0, args.run_name)
-
+t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
+nside_dust = hp.get_nside(dust_map_downgraded_mjy)
 pix_ecl = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
+pix_ecl_firas = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
 # Vectorized computation of pixel indices for all IFGs and pixels
 for ifg_i in range(g.N_IFGS):
-    pix_ecl[:, :, ifg_i] = hp.ang2pix(
-        g.NSIDE["firas"],
-        np.broadcast_to(ecl_lon[:, None], ecl_lats[:, :, ifg_i].shape),
-        ecl_lats[:, :, ifg_i],
-        lonlat=True,
-    )
-t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
+    pix_ecl[:, :, ifg_i] = hp.ang2pix(nside_dust,
+                                      np.broadcast_to(ecl_lon[:, None],
+                                                      ecl_lats[:, :, ifg_i].shape),
+                                      ecl_lats[:, :, ifg_i], lonlat=True)
+    pix_ecl_firas[:, :, ifg_i] = hp.ang2pix(g.NSIDE["firas"],
+                                            np.broadcast_to(ecl_lon[:, None],
+                                                            ecl_lats[:, :, ifg_i].shape),
+                                            ecl_lats[:, :, ifg_i], lonlat=True)
 
-npix = hp.nside2npix(g.NSIDE["firas"])
+npix = hp.nside2npix(nside_dust)
 if args.plots == "debug":
-    hit_map = np.bincount(pix_ecl.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG["firas"]
+    t0 = utils.log_step("save_hit_map", t0, args.run_name)
+    hit_map = np.bincount(pix_ecl_firas.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG["firas"]
     mask = hit_map == 0
     hit_map[mask] = np.nan
     if g.PNG:
@@ -126,15 +126,15 @@ if args.plots == "debug":
         hp.write_map("../output/hit_maps/scanning_strategy_firas_sim.fits", hit_map, overwrite=True,
                     dtype=np.float64)
     print("Saved hit map of the scanning strategy to ../output/hit_maps/.")
-    t0 = utils.log_step("save_hit_map", t0, args.run_name)
+    
 
+t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
 # Combine each of the 16 IFGs, filling all 512 points for each IFG
 ifgs = np.zeros((pix_ecl.shape[0], g.NPIXPERIFG["firas"], g.N_IFGS))  # 16 x npix x 512
 # Vectorized assignment to speed up frankensteining IFGs
 
 for ifg_i in range(g.N_IFGS):
     ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
-t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
 
 # and lastly we add the 16 ifgs together
 total_ifg = np.sum(ifgs, axis=2)
@@ -211,6 +211,8 @@ if args.plots == "debug" and args.noise:
     print(f"Saved IFG {n} with noise to ../output/sims/firas/ifgs/{n}_with_noise.png.")
 
 np.save("../output/data/firas/ifgs.npy", total_ifg)
+np.save("../output/data/firas/ecl_lat.npy", ecl_lats)
+np.save("../output/data/firas/ecl_lon.npy", ecl_lons)
 if args.noise:
     np.save("../output/data/firas/noise.npy", noise)
 print("Saved FIRAS IFGs to ../output/data/firas/.")

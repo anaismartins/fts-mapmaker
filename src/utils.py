@@ -20,5 +20,6 @@ def save_maps(freq, m, path, write_png=False):
 def log_step(label, t_start, run_name):
     t = _time()
     with open(f"../output/profiling/{run_name}.txt", "a") as f:
-        f.write(f"{label:<35} | {t - t_start:.2f}\n")
+        f.write(f"{t - t_start:.2f}\n")
+        f.write(f"{label:<35} | ")
     return t

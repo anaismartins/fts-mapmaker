@@ -27,11 +27,19 @@ if args.sim_type == "firas":
 
 pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
 t0 = utils.log_step("ang2pix", t0, args.run_name)
+
 # use only the middle pixel
+mid_pix = g.NPIXPERIFG[args.sim_type] // 2
 if args.sim_type == "fossil":
-    pix = pix[:, g.NPIXPERIFG[args.sim_type] // 2]
+    ecl_lon_mid = ecl_lon[:, mid_pix]
+    ecl_lat_mid = ecl_lat[:, mid_pix]
+    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon_mid, ecl_lat_mid, lonlat=True)
 elif args.sim_type == "firas":
-    pix = pix[:, g.NPIXPERIFG[args.sim_type] // 2, g.N_IFGS // 2]
+    mid_ifg = g.N_IFGS // 2
+    print(f"DEBUG: ecl_long shape: {ecl_lon.shape}, ecl_lat shape: {ecl_lat.shape}")
+    ecl_lon_mid = ecl_lon[:, mid_pix, mid_ifg]
+    ecl_lat_mid = ecl_lat[:, mid_pix, mid_ifg]
+    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon_mid, ecl_lat_mid, lonlat=True)
 else:
     raise ValueError("args.sim_type must be 'fossil' or 'firas'")
 t0 = utils.log_step("select_middle_pixel", t0, args.run_name)
