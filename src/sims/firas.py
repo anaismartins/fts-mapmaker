@@ -31,11 +31,14 @@ sed = np.nan_to_num(sed)
 t0 = utils.log_step("irfft", t0, args.run_name)
 sed_ifg = np.fft.irfft(sed)
 
-# t0 = utils.log_step("multiply dust map", t0, args.run_name)
-# ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
+t0 = utils.log_step("roll sed_ifg", t0, args.run_name)
+sed_ifg = np.roll(sed_ifg, 360)
 
-# ifg = np.roll(ifg, 360, axis=1)
-# ifg = ifg.real
+t0 = utils.log_step("multiply dust map", t0, args.run_name)
+ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
+
+t0 = utils.log_step("take real part of ifg", t0, args.run_name)
+ifg = ifg.real
 
 t0 = utils.log_step("load_sky_data", t0, args.run_name)
 user = os.environ["USER"]
@@ -99,16 +102,10 @@ nside_dust = hp.get_nside(dust_map_Mjy)
 pix_ecl = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
 pix_ecl_firas = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
 
-t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
-for ifg_i in range(g.N_IFGS):
-    pix_ecl[:, :, ifg_i] = hp.ang2pix(nside_dust,
-                                      np.broadcast_to(ecl_lon[:, None],
-                                                      ecl_lats[:, :, ifg_i].shape),
-                                      ecl_lats[:, :, ifg_i], lonlat=True)
-    pix_ecl_firas[:, :, ifg_i] = hp.ang2pix(g.NSIDE["firas"],
-                                            np.broadcast_to(ecl_lon[:, None],
-                                                            ecl_lats[:, :, ifg_i].shape),
-                                            ecl_lats[:, :, ifg_i], lonlat=True)
+t0 = utils.log_step("compute_pixel_indices nside dust", t0, args.run_name)
+pix_ecl = hp.ang2pix(nside_dust, ecl_lons, ecl_lats, lonlat=True)
+t0 = utils.log_step("compute_pixel_indices nside firas", t0, args.run_name)
+pix_ecl_firas = hp.ang2pix(g.NSIDE["firas"], ecl_lons, ecl_lats, lonlat=True)
 
 npix = hp.nside2npix(nside_dust)
 if args.plots == "debug":
@@ -136,18 +133,15 @@ t0 = utils.log_step("initialize_ifgs", t0, args.run_name)
 ifgs = np.zeros((pix_ecl.shape[0], g.NPIXPERIFG["firas"], g.N_IFGS))  # 16 x npix x 512
 # Vectorized assignment to speed up frankensteining IFGs
 
-col_idx = (np.arange(g.NPIXPERIFG["firas"]) + 180) % g.NPIXPERIFG["firas"]
-sed_ifg_shifted = sed_ifg[col_idx]
-
 t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
 for ifg_i in range(g.N_IFGS):
-    # ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
-    ifgs[:, :, ifg_i] = (dust_map_Mjy[pix_ecl[:, :, ifg_i]] * sed_ifg_shifted[ifg_i]).real
+    ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
 
 t0 = utils.log_step("sum_ifgs", t0, args.run_name)
 total_ifg = np.sum(ifgs, axis=2)
 
 if args.plots == "debug":
+    t0 = utils.log_step("plot_ifgs", t0, args.run_name)
     fig, ax = plt.subplots(2, 1, figsize=(10, 8))
     n = np.random.randint(0, total_ifg.shape[0])
     ax[0].plot(ifgs[n], alpha=0.5)
@@ -171,28 +165,26 @@ if args.plots == "debug" or args.plots == "paper_only":
     row_lat = ecl_lats[n]
     lon_center = float(np.mean(row_lon))
     lat_center = float(np.mean(row_lat))
+
+    print(f"Pixels hit: {np.unique(row_pix).size} unique pixels by IFG {n}.")
+    npix = hp.nside2npix(g.NSIDE["firas"])
     map_pix = np.bincount(row_pix.flatten(), minlength=npix)
+    vmax = max(1, int(map_pix.max()))
 
     # Left panel: full-sky mollview
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, title="Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
-                max=g.N_IFGS * g.NPIXPERIFG["firas"], xsize=2000, coord="E", cmap="Reds", hold=True,
-                sub=(1, 2, 1), format="%d")
-    hp.projplot(lon_center, lat_center, coord="E", color="green", lonlat=True, marker="x",
-                markersize=5)
+                max=vmax, coord="E", cmap="RdYlGn", hold=True)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
+
     # Adjust left panel position to center it better
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
 
     # Right panel: zoomed gnomonic view centered on the pixel
     ax2 = plt.subplot(1, 2, 2)
-    hp.gnomview(map_pix, rot=(lon_center, lat_center), title="Zoomed view (2° radius)", unit="Hits",
-        min=0, # max=map_pix.max(),
-        max=g.FITS * g.NPIXPERIFG["firas"],  # Maximum possible hits
-        xsize=800, coord="E", cmap="Reds", reso=1.0,  # resolution in arcmin
-        hold=True, sub=(1, 2, 2), format="%d",  # Format colorbar as integers
-        )
-    hp.projplot(lon_center, lat_center, coord="E", color="green", lonlat=True, marker="x",
-                markersize=10)
+    hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Zoomed view", unit="Hits", min=0,
+                max=vmax, coord="E", cmap="RdYlGn", hold=True, xsize=800)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     # Format the axes tick labels to avoid scientific notation on the right panel
     current_ax = plt.gca()
@@ -228,5 +220,6 @@ if args.noise:
 print("Saved FIRAS IFGs to ../output/data/firas/.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    f.write(f"{(_time() - t00)/60:.2f}\n")
     f.write("=" * 50 + "\n")
     f.write(f"Total time for FIRAS simulation: {(_time() - t00)/60:.2f} min\n")
