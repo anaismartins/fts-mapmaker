@@ -22,7 +22,6 @@ def white_noise(ntod, simtype):
         Array of shape (npix, ntod, IFG_SIZE) with the white noise to add to each interferogram.
     """
     sigma = None
-    print(f"DEBUG: Number of TODs: {ntod}")
     
     if simtype == "fossil":
         sigma = np.full(g.IFG_SIZE[simtype], 1e-6 * np.sqrt(ntod))

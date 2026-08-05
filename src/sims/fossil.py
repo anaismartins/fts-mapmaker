@@ -32,43 +32,38 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
     f.write(f"Number of workers used: {args.nworkers}\n")
     f.write("=" * 50 + "\n")
+    f.write(f"{'starting':<35} | ")
 
 t0 = _time()
 t00 = _time()
 
 data_dir = "../output/data/fossil"
 if not os.path.exists(f"{data_dir}/ecl_lat.npy"):
-    ecl_lon, ecl_lat = ss.create_pointings(args)
     t0 = utils.log_step("create_pointings", t0, args.run_name)
+    ecl_lon, ecl_lat = ss.create_pointings(args)
 else:
-    ecl_lon = np.load(f"{data_dir}/ecl_lon.npy", mmap_mode="r")
     t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-    ecl_lat = np.load(f"{data_dir}/ecl_lat.npy", mmap_mode="r")
+    ecl_lon = np.load(f"{data_dir}/ecl_lon.npy", mmap_mode="r")
     t0 = utils.log_step("load ecl_lat", t0, args.run_name)
-    
-dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
+    ecl_lat = np.load(f"{data_dir}/ecl_lat.npy", mmap_mode="r")
+
 t0 = utils.log_step("sim_dust", t0, args.run_name)
-# TODO: problem should be somewhere after here
+dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
 
-sed_ifg = fft.irfft(sed)
 t0 = utils.log_step("irfft", t0, args.run_name)
-
-ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
-t0 = utils.log_step("multiply dust map", t0, args.run_name)
-ifg = ifg.real
-t0 = utils.log_step("real", t0, args.run_name)
+sed_ifg = fft.irfft(sed)
 
 if args.plots == "debug":
     dust = np.multiply.outer(dust_map_Mjy, sed)
 
     dust_map_dir = "../output/sims/fossil/dust_maps"
-    args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
+    args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
 
+    t0 = utils.log_step("save_dust_maps", t0, args.run_name)
     for freq, dust_map_i, out_dir in args_list:
         utils.save_maps(freq, dust_map_i, out_dir, write_png=True)
     print(f"Saved dust maps to {dust_map_dir}.")
-    t0 = utils.log_step("save_dust_maps", t0, args.run_name)
 
 # now we frankenstein the IFGs together
 n_cols = sed_ifg.shape[0]
@@ -81,8 +76,8 @@ nside_dust = hp.get_nside(dust_map_Mjy)
 pix_ecl = hp.ang2pix(nside_dust, ecl_lon, ecl_lat, lonlat=True)
 pix_ecl_fossil = hp.ang2pix(g.NSIDE["fossil"], ecl_lon, ecl_lat, lonlat=True)
 
-ifg_scanning = dust_map_Mjy[pix_ecl] * sed_ifg_shifted
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
+ifg_scanning = (dust_map_Mjy[pix_ecl] * sed_ifg_shifted).real
 
 n = random.randrange(ifg_scanning.shape[0])
 if args.plots == "debug":
@@ -133,9 +128,9 @@ if args.plots == "debug" or args.plots == "paper_only":
 
 # add white noise
 if args.noise:
+    t0 = utils.log_step("white_noise", t0, args.run_name)
     noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil", args=args,
                                     signal=ifg_scanning, ifg=False)
-    t0 = utils.log_step("white_noise", t0, args.run_name)
 
 if args.noise:
     ifg_final = ifg_scanning + noise
@@ -160,6 +155,7 @@ if args.plots == "debug" and args.noise:
 
 np.save(f"{data_dir}/ifgs.npy", ifg_final)
 if args.noise:
+    t0 = utils.log_step("save noise", t0, args.run_name)
     np.save(f"{data_dir}/noise.npy", sigma)
 print(f"Saved IFGs, pixel indices, and noise to {data_dir}.")
 

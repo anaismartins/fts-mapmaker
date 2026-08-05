@@ -25,17 +25,17 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t0 = _time()
 t00 = _time()
 
-dust_map_downgraded_mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
+dust_map_Mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
 sed = np.nan_to_num(sed)
 
 t0 = utils.log_step("irfft", t0, args.run_name)
-sed_ifg = np.fft.irfft(sed, norm="ortho")
+sed_ifg = np.fft.irfft(sed)
 
-t0 = utils.log_step("multiply dust map", t0, args.run_name)
-ifg = np.multiply.outer(dust_map_downgraded_mjy, sed_ifg)
+# t0 = utils.log_step("multiply dust map", t0, args.run_name)
+# ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
 
-ifg = np.roll(ifg, 360, axis=1)
-ifg = ifg.real
+# ifg = np.roll(ifg, 360, axis=1)
+# ifg = ifg.real
 
 t0 = utils.log_step("load_sky_data", t0, args.run_name)
 user = os.environ["USER"]
@@ -93,11 +93,13 @@ mask_high = ecl_lats > 90
 ecl_lats[mask_high] = 180 - ecl_lats[mask_high]
 ecl_lons[mask_high] = 180 - ecl_lons[mask_high]
 
-t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
-nside_dust = hp.get_nside(dust_map_downgraded_mjy)
+t0 = utils.log_step("get dust NSIDE", t0, args.run_name)
+nside_dust = hp.get_nside(dust_map_Mjy)
+
 pix_ecl = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
 pix_ecl_firas = np.zeros((len(ecl_lat), g.NPIXPERIFG["firas"], g.N_IFGS), dtype=int)
-# Vectorized computation of pixel indices for all IFGs and pixels
+
+t0 = utils.log_step("compute_pixel_indices", t0, args.run_name)
 for ifg_i in range(g.N_IFGS):
     pix_ecl[:, :, ifg_i] = hp.ang2pix(nside_dust,
                                       np.broadcast_to(ecl_lon[:, None],
@@ -111,7 +113,7 @@ for ifg_i in range(g.N_IFGS):
 npix = hp.nside2npix(nside_dust)
 if args.plots == "debug":
     t0 = utils.log_step("save_hit_map", t0, args.run_name)
-    hit_map = np.bincount(pix_ecl_firas.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG["firas"]
+    hit_map = np.bincount(pix_ecl.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG["firas"]
     mask = hit_map == 0
     hit_map[mask] = np.nan
     if g.PNG:
@@ -128,15 +130,21 @@ if args.plots == "debug":
     print("Saved hit map of the scanning strategy to ../output/hit_maps/.")
     
 
-t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
+
 # Combine each of the 16 IFGs, filling all 512 points for each IFG
+t0 = utils.log_step("initialize_ifgs", t0, args.run_name)
 ifgs = np.zeros((pix_ecl.shape[0], g.NPIXPERIFG["firas"], g.N_IFGS))  # 16 x npix x 512
 # Vectorized assignment to speed up frankensteining IFGs
 
-for ifg_i in range(g.N_IFGS):
-    ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
+col_idx = (np.arange(g.NPIXPERIFG["firas"]) + 180) % g.NPIXPERIFG["firas"]
+sed_ifg_shifted = sed_ifg[col_idx]
 
-# and lastly we add the 16 ifgs together
+t0 = utils.log_step("frankenstein_ifgs", t0, args.run_name)
+for ifg_i in range(g.N_IFGS):
+    # ifgs[:, :, ifg_i] = ifg[pix_ecl[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
+    ifgs[:, :, ifg_i] = (dust_map_Mjy[pix_ecl[:, :, ifg_i]] * sed_ifg_shifted[ifg_i]).real
+
+t0 = utils.log_step("sum_ifgs", t0, args.run_name)
 total_ifg = np.sum(ifgs, axis=2)
 
 if args.plots == "debug":
@@ -154,34 +162,36 @@ if args.plots == "debug":
     print(f"Saved IFG {n} to ../output/sims/firas/ifgs/{n}.png.")
 
 # plot pixels hit on a map
-pix_to_map = np.zeros(g.N_IFGS * g.NPIXPERIFG["firas"], dtype=int)
-for ifg_i in range(g.N_IFGS):
-    pix_to_map[ifg_i * g.NPIXPERIFG["firas"] : (ifg_i + 1) * g.NPIXPERIFG["firas"]] = pix_ecl[n, :, ifg_i]
-map_pix = np.bincount(pix_to_map, minlength=npix)
-
 if args.plots == "debug" or args.plots == "paper_only":
     # Create a two-panel figure: full sky + zoomed view
     fig = plt.figure(figsize=(16, 6))
+
+    row_pix = pix_ecl_firas[n]
+    row_lon = ecl_lons[n]
+    row_lat = ecl_lats[n]
+    lon_center = float(np.mean(row_lon))
+    lat_center = float(np.mean(row_lat))
+    map_pix = np.bincount(row_pix.flatten(), minlength=npix)
 
     # Left panel: full-sky mollview
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, title="Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
                 max=g.N_IFGS * g.NPIXPERIFG["firas"], xsize=2000, coord="E", cmap="Reds", hold=True,
                 sub=(1, 2, 1), format="%d")
-    hp.projplot(ecl_lon[n], ecl_lat[n], coord="E", color="green", lonlat=True, marker="x",
+    hp.projplot(lon_center, lat_center, coord="E", color="green", lonlat=True, marker="x",
                 markersize=5)
     # Adjust left panel position to center it better
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
 
     # Right panel: zoomed gnomonic view centered on the pixel
     ax2 = plt.subplot(1, 2, 2)
-    hp.gnomview(map_pix, rot=(ecl_lon[n], ecl_lat[n]), title="Zoomed view (2° radius)", unit="Hits",
+    hp.gnomview(map_pix, rot=(lon_center, lat_center), title="Zoomed view (2° radius)", unit="Hits",
         min=0, # max=map_pix.max(),
         max=g.FITS * g.NPIXPERIFG["firas"],  # Maximum possible hits
         xsize=800, coord="E", cmap="Reds", reso=1.0,  # resolution in arcmin
         hold=True, sub=(1, 2, 2), format="%d",  # Format colorbar as integers
         )
-    hp.projplot(ecl_lon[n], ecl_lat[n], coord="E", color="green", lonlat=True, marker="x",
+    hp.projplot(lon_center, lat_center, coord="E", color="green", lonlat=True, marker="x",
                 markersize=10)
 
     # Format the axes tick labels to avoid scientific notation on the right panel
