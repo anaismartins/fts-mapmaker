@@ -174,8 +174,8 @@ if args.plots == "debug" or args.plots == "paper_only":
     # Left panel: full-sky mollview
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, title="Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
-                max=vmax, coord="E", cmap="RdYlGn", hold=True)
-    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord=["E", "G"], cmap="RdYlGn", hold=True)
+    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
 
     # Adjust left panel position to center it better
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
@@ -183,8 +183,8 @@ if args.plots == "debug" or args.plots == "paper_only":
     # Right panel: zoomed gnomonic view centered on the pixel
     ax2 = plt.subplot(1, 2, 2)
     hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Zoomed view", unit="Hits", min=0,
-                max=vmax, coord="E", cmap="RdYlGn", hold=True, xsize=800)
-    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord=["E", "G"], cmap="RdYlGn", hold=True, xsize=800)
+    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
 
     # Format the axes tick labels to avoid scientific notation on the right panel
     current_ax = plt.gca()

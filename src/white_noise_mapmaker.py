@@ -19,7 +19,7 @@ from argparser import args
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for binned mapmaker for FOSSIL\n")
     f.write("=" * 50 + "\n")
-    f.write(f"{'starting':<35} | ")
+    f.write(f"{'starting':<40} | ")
 
 t00 = _time()
 t0 = _time()
@@ -49,8 +49,9 @@ denominator = np.zeros_like(numerator, dtype=float)
 # than the number of IFGs) and use np.bincount to accumulate values per pixel.
 # This avoids the expensive Python-level loop over all IFGs and is much faster.
 t0 = utils.log_step("ang2pix", t0, args.run_name)
+pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)  
 
-pix_grid = hp.ang2pix(nside=g.NSIDE[args.sim_type], lon=ecl_lon, lat=ecl_lat, lonlat=True)  
+t0 = utils.log_step("compute w_noise", t0, args.run_name)
 w_noise = 1.0 / sigma**2
 
 if args.sim_type == "fossil":
@@ -65,14 +66,13 @@ if args.sim_type == "fossil":
 elif args.sim_type == "firas":
     for ifg_i in range(g.N_IFGS):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
-            lon_s = ecl_lon[ifg_i, x_i]
-            lat_s = ecl_lat[ifg_i, x_i]
             vals = ifgs[:, x_i] * w_noise
+
+            pix = pix_grid[:, x_i, ifg_i]
             
-            pix_s = hp.ang2pix(g.NSIDE[args.sim_type], lon_s, lat_s, lonlat=True)
             # bincount returns length npix; fill the column x_i for numerator/denominator
-            numerator[:, x_i] += np.bincount(pix_s, weights=vals, minlength=g.NPIX[args.sim_type])
-            denominator[:, x_i] += np.bincount(pix_s, weights=np.ones_like(vals) * 1.0/(sigma**2),
+            numerator[:, x_i] += np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
+            denominator[:, x_i] += np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
                                                minlength=g.NPIX[args.sim_type])
 else:
     raise ValueError(f"Unknown sim_type: {args.sim_type}")

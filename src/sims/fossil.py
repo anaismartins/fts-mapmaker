@@ -112,13 +112,13 @@ if args.plots == "debug" or args.plots == "paper_only":
     vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, coord=["E", "G"], title="Pixels hit", cmap="RdYlGn", min=0, max=vmax, hold=True)
-    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
+    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
 
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
     ax2 = plt.subplot(1, 2, 2)
     hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Pixels hit", cmap="RdYlGn", min=0,
-                max=vmax, coord="E", hold=True)
-    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord=["E", "G"], hold=True)
+    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
 
     current_ax = plt.gca()
     current_ax.ticklabel_format(style="plain", axis="both")
