@@ -49,23 +49,25 @@ denominator = np.zeros_like(numerator, dtype=float)
 # than the number of IFGs) and use np.bincount to accumulate values per pixel.
 # This avoids the expensive Python-level loop over all IFGs and is much faster.
 t0 = utils.log_step("ang2pix", t0, args.run_name)
+
+pix_grid = hp.ang2pix(nside=g.NSIDE[args.sim_type], lon=ecl_lon, lat=ecl_lat, lonlat=True)  
+w_noise = 1.0 / sigma**2
+
 if args.sim_type == "fossil":
     for x_i in range(g.IFG_SIZE[args.sim_type]):
-        lon_s = ecl_lon[:, x_i]
-        lat_s = ecl_lat[:, x_i]
-        vals = ifgs[:, x_i] / (sigma**2)
+        vals = ifgs[:, x_i] * w_noise
         
-        pix_s = hp.ang2pix(g.NSIDE[args.sim_type], lon_s, lat_s, lonlat=True)
+        pix  = pix_grid[:, x_i]
         # bincount returns length npix; fill the column x_i for numerator/denominator
-        numerator[:, x_i] = np.bincount(pix_s, weights=vals, minlength=g.NPIX[args.sim_type])
-        denominator[:, x_i] = np.bincount(pix_s, weights=np.ones_like(vals) * 1.0/(sigma**2),
+        numerator[:, x_i] = np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
+        denominator[:, x_i] = np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
                                           minlength=g.NPIX[args.sim_type])
 elif args.sim_type == "firas":
     for ifg_i in range(g.N_IFGS):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
             lon_s = ecl_lon[ifg_i, x_i]
             lat_s = ecl_lat[ifg_i, x_i]
-            vals = ifgs[:, x_i] / (sigma**2)
+            vals = ifgs[:, x_i] * w_noise
             
             pix_s = hp.ang2pix(g.NSIDE[args.sim_type], lon_s, lat_s, lonlat=True)
             # bincount returns length npix; fill the column x_i for numerator/denominator
@@ -75,6 +77,7 @@ elif args.sim_type == "firas":
 else:
     raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
+t0 = utils.log_step("compute m_ifg", t0, args.run_name)
 mask = denominator == 0
 
 hp.mollview(numerator[:, 100], title="Numerator at frequency index 100", coord=["E", "G"], min=0,
@@ -96,17 +99,16 @@ if args.sim_type == "fossil":
     nfreq = 129
 elif args.sim_type == "firas":
     nfreq = 257
-frequencies = spectra.generate_frequencies(nfreq=nfreq)
+frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
 path = f"../output/white_noise/{args.sim_type}/"
 for nui, freq in enumerate(frequencies):
     if g.FITS:
-        hp.write_map(f"{path}maps/{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
-        hp.write_map(f"{path}phase_maps/{int(freq):04d}.fits", phase[:, nui], overwrite=True,
-                        dtype=np.float64)
+        hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
+
     if g.PNG:
         hp.mollview(m[:, nui], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=50,
                     xsize=2000, coord=["E", "G"])
-        plt.savefig(f"{path}maps/{int(freq):04d}.png")
+        plt.savefig(f"{path}{int(freq):04d}.png")
         plt.close()
-print(f"Saved maps to {path}maps/ and {path}phase_maps/.")
+print(f"Saved maps to {path}.")
