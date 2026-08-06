@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-sim_type="firas"
-mapmaker_type="white_noise"
+sim_type="fossil"
+mapmaker_type="cg"
 version="v4"
 
 run_name="${mapmaker_type}_${sim_type}_${version}"

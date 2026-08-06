@@ -5,27 +5,17 @@ or in more simple terms we solve
     A x = b
 """
 
-import multiprocessing
 import os
 import shutil
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import time as _time
 
 import healpy as hp
-import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
 import utils
 from argparser import args
-
-
-def _save_mollview(map_data, output_path, **kwargs):
-    fig = plt.figure()
-    hp.mollview(map_data, fig=fig.number, **kwargs)
-    fig.savefig(output_path)
-    plt.close(fig)
 
 
 def calculate_b(d, pointing, sigma):
@@ -38,29 +28,15 @@ def calculate_b(d, pointing, sigma):
         The vector b.
     """
 
-    # Fd = np.fft.rfft(d, axis=1).flatten()
-
-    # N_inv_d = (Fd / sigma**2).reshape((d.shape[0], g.SPEC_SIZE))
-
-    # FN_inv_d = np.fft.irfft(N_inv_d, axis=1).flatten()
-
     N_inv_d = d.flatten() / sigma**2
-    # N_inv_d = np.fft.fft(d) / sigma**2
 
-    # N_inv_d = np.fft.ifft(N_inv_d)
-
-    b = np.zeros(
-        (
-            g.NPIX[args.sim_type],
-            g.IFG_SIZE[args.sim_type],
-        ),
-        dtype=np.float64,
-    )
+    b = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type],), dtype=np.float64)
     for pix_i in range(d.shape[0]):
         for x_i in range(d.shape[1]):
-            b[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += N_inv_d[
-                pix_i * g.IFG_SIZE[args.sim_type] + x_i
-            ]
+            b[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += N_inv_d[pix_i *
+                                                                                 g.IFG_SIZE[
+                                                                                     args.sim_type
+                                                                                     ] + x_i]
 
     return b.flatten()
 
@@ -86,41 +62,25 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[args.sim_type]):
 
     x = x.reshape((npix, g.IFG_SIZE[args.sim_type]))
 
-    Px = np.zeros(
-        (pointing.shape[0] // g.IFG_SIZE[args.sim_type], g.IFG_SIZE[args.sim_type]),
-        dtype=np.float64,
-    )
+    Px = np.zeros((pointing.shape[0] // g.IFG_SIZE[args.sim_type], g.IFG_SIZE[args.sim_type]),
+                  dtype=np.float64)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE[args.sim_type]):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
             Px[pix_i, x_i] = x[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i]
 
-    # FPx = np.fft.rfft(Px, axis=1).flatten()
-    # N_inv_Px = (FPx / sigma**2).reshape((Px.shape[0], g.SPEC_SIZE))
     N_inv_Px = Px.flatten() / sigma**2
-
-    # FN_inv_Px = np.fft.irfft(N_inv_Px, axis=1).flatten()
 
     A_x = np.zeros((npix, g.IFG_SIZE[args.sim_type]), dtype=np.float64)
     for pix_i in range(pointing.shape[0] // g.IFG_SIZE[args.sim_type]):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
             A_x[pointing[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += N_inv_Px[
-                pix_i * g.IFG_SIZE[args.sim_type] + x_i
-            ]
+                pix_i *g.IFG_SIZE[args.sim_type] + x_i]
 
     return A_x.flatten()
 
 
-def preconditioned_conjugate_gradient(
-    b,
-    pointing,
-    sigma,
-    precond,
-    x=None,
-    maxiter=1000,
-    tol=1e-10,
-    npix=g.NPIX[args.sim_type],
-    save_path=None,
-):
+def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10,
+                                      npix=g.NPIX[args.sim_type], save_path=None):
     if x is None:
         x = np.zeros_like(b)
     else:
@@ -134,12 +94,9 @@ def preconditioned_conjugate_gradient(
     print(f"b: {b}")
     r = b - Ax
 
-    # d = M_inv @ r
     d = np.zeros_like(r)
     d[precond != 0] = r[precond != 0] / precond[precond != 0]
 
-    # check why delta_new is nan
-    print("debug:", r, d)
     delta_new = np.dot(r.T, d)
     delta0 = delta_new
 
@@ -156,9 +113,6 @@ def preconditioned_conjugate_gradient(
         os.makedirs(f"{save_path}res_ifg/")
 
     for i in range(maxiter):
-        # check what is causing the nans in eps
-        # print("debug:", delta_new, delta0, delta_new / delta0)
-
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
         q = A_dot_x(d, pointing, sigma, npix=npix)
@@ -183,114 +137,39 @@ def preconditioned_conjugate_gradient(
 
         if delta_new < tol**2 * delta0:
             break
-
-        print(f"DEBUG: npix: {npix} and IFG_SIZE: {g.IFG_SIZE[args.sim_type]}")            
-        y = x.reshape((npix, g.IFG_SIZE[args.sim_type]))
-        m = np.abs(np.fft.rfft(y, axis=1))
-
-        r2 = r.reshape((npix, g.IFG_SIZE[args.sim_type]))
-
-        print(f"Plotting intermediate results for iteration {i}...")
-
-        _save_mollview(
-            m[:, 100],
-            f"{save_path}maps/iter_{i:04}.png",
-            title=f"CG map at frequency index 100 for iteration {i:04}",
-            unit="Amplitude",
-            min=0,
-            max=20,
-            coord=["E", "G"],
-        )
-
-        _save_mollview(
-            y[:, 100],
-            f"{save_path}ifg/iter_{i:04}.png",
-            title=f"IFG map at distance index 100 for iteration {i:04d}",
-            unit="Amplitude",
-            coord=["E", "G"],
-        )
-        _save_mollview(
-            r2[:, 100],
-            f"{save_path}res_ifg/iter_{i:04}.png",
-            title="IFG map at distance index 100",
-            unit="Amplitude",
-            coord=["E", "G"],
-        )
-
     return x
 
 
 if __name__ == "__main__":
-    # set up a place to save all terminal output, global input file, and output figures/files
-    output_dir = f"../output/cg_mapmaker/{g.RUN_NAME}"
-    os.makedirs(output_dir, exist_ok=True)
-    shutil.copyfile("/mn/stornext/d5/data/aimartin/fts-mapmaker/src/globals.py",
-                    f"{output_dir}/globals.py")
-    # logging
-    old_stdout = sys.stdout
-    log_file = open(f"{output_dir}/message.log","w")
-    sys.stdout = log_file
+    with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+        f.write("Profiling output for binned mapmaker for FOSSIL\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"{'starting':<40} | ")
 
-    t1 = time.time()
-    print("Initializing CG mapmaker...")
-    data = np.load(f"../output/{args.sim_type}/ifgs.npy")
-    ifgs = data["ifg"]
-    pix = data["pix"]
-    sigma = data["sigma"]
+    t00 = _time()
+    t0 = _time()
 
-    max_threads = multiprocessing.cpu_count()
-    print(f"Number of threads: {max_threads}")
+    t0 = utils.log_step("load ifgs", t0, args.run_name)
+    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy", mmap_mode="r")
+    t0 = utils.log_step("load pix", t0, args.run_name)
+    ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
+    ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
+    t0 = utils.log_step("load sigma", t0, args.run_name)
+    sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-    # Use ThreadPoolExecutor for parallel processing
-    max_workers = min(ifgs.shape[1], max_threads)  # Adjust number of threads as needed
-
-    if args.sim_type == "firas":
-        ifgs = ifgs / g.N_IFGS
-    ifgs = np.roll(ifgs, -360, axis=1)
-    print(f"shape of ifgs before flatten: {ifgs.shape}")
-
-    # ifgs = ifgs.flatten()
-    # print(f"shape of ifgs after flatten: {ifgs.shape}")
-
-    print(f"shape of pix before flatten: {pix.shape}")
-    pix = pix.flatten()
-    print(f"shape of pix after flatten: {pix.shape}")
-
-    print(f"shape of sigma before flatten: {sigma.shape}")
+    t0 = utils.log_step("roll", t0, args.run_name)
     if args.sim_type == "fossil":
-        sigma = (sigma[:, np.newaxis] * np.ones(g.IFG_SIZE[args.sim_type])).flatten()
+        ifgs = np.roll(ifgs, -180, axis=1)
     elif args.sim_type == "firas":
-        sigma = (sigma[:, np.newaxis] * np.ones((g.IFG_SIZE[args.sim_type], g.N_IFGS))).flatten()
-    else:
-        raise ValueError("sim_type must be 'fossil' or 'firas'")
-    print(f"shape of sigma after flatten: {sigma.shape}")
-        
+        ifgs = ifgs / g.N_IFGS
+        ifgs = np.roll(ifgs, -360, axis=1)
 
-    plt.vlines(
-        512 * np.arange(10),
-        np.min(sigma[: (512 * 10)]),
-        np.max(sigma[: (512 * 10)]),
-        color="red",
-    )
-    plt.vlines(
-        360 + 512 * np.arange(10),
-        np.min(sigma[: (512 * 10)]),
-        np.max(sigma[: (512 * 10)]),
-        color="green",
-    )
-    plt.plot(sigma[: (512 * 10)])
-    # plt.plot(ifgs[: (512 * 10)], alpha=0.5, color="orange")
-    plt.plot(pix[: (512 * 10)], alpha=0.5, color="purple")
-    # plt.show()
-    plt.savefig("../output/ifgs_debug.png")
-    plt.close()
+    t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True).flatten()
 
     b = calculate_b(ifgs, pix, sigma)
 
-    print(f"Starting conjugate gradient solver...")
-
     # set M to be the hits map
-    print("NPIX: ", g.NPIX[args.sim_type])
     hits_map = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
     for pix_i in range(pix.shape[0] // g.IFG_SIZE[args.sim_type]):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
@@ -300,27 +179,19 @@ if __name__ == "__main__":
     rms_map = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
     for pix_i in range(pix.shape[0] // g.IFG_SIZE[args.sim_type]):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
-            rms_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += (
-                1 / sigma[pix_i * g.IFG_SIZE[args.sim_type] + x_i] ** 2
-            )
+            rms_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += (1 / sigma[
+                pix_i * g.IFG_SIZE[args.sim_type] + x_i] ** 2)
     rms_map = np.sqrt(rms_map.flatten())
 
     x0 = np.zeros_like(b)
     for i in range(g.IFG_SIZE[args.sim_type]):
         x0[g.NPIX[args.sim_type] * i : g.NPIX[args.sim_type] * (i + 1)] = hp.read_map(
-            f"../output/white_noise_mapmaker/{args.sim_type}/ifg_maps/ifg_{i:04d}.fits"
-        )
+            f"../output/white_noise_mapmaker/{args.sim_type}/ifg_maps/ifg_{i:04d}.fits")
 
-    # x = preconditioned_conjugate_gradient(b, pix, sigma, hits_map)
-    x = preconditioned_conjugate_gradient(
-        b, pix, sigma, rms_map, x=x0, save_path="../output/cg/"
-    )
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map, x=x0, save_path="../output/cg/")
 
     x = x.reshape((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
-    m = np.abs(np.fft.rfft(x, axis=1))
-    t2 = time.time()
-    print(f"Finished CG mapmaking in {int((t2 - t1)/60)} minutes.")
-    print("Finished CG mapmaking, saving to disk...")
+    m = np.real(np.fft.rfft(x, axis=1))
 
     # use the solution of the white noise mapmaker as x0
     if args.sim_type == "fossil":
@@ -331,13 +202,17 @@ if __name__ == "__main__":
         raise ValueError("Unknown sim_type")
     frequencies = utils.generate_frequencies(nfreq=nfreq)
 
-    t1 = time.time()
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=args.nworkers) as executor:
         futures = []
         for nui, freq in enumerate(frequencies):
             futures.append(executor.submit(utils.save_maps, freq, m[:, nui]))
         # Ensure all are completed
         for future in as_completed(futures):
             future.result()
-    t2 = time.time()
-    print(f"Finished saving maps in {int((t2 - t1))} seconds.")
+
+    t0 = utils.log_step("save_maps", t0, args.run_name)
+    print(f"Saved maps to ../output/binned/{args.sim_type}/.")
+        
+    with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+        f.write("=" * 50 + "\n")
+        f.write(f"Total time for binned mapmaker: {(_time() - t00)/60:.2f} min\n")
