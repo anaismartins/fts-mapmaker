@@ -54,6 +54,7 @@ pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
 t0 = utils.log_step("compute w_noise", t0, args.run_name)
 w_noise = 1.0 / sigma**2
 
+t0 = utils.log_step("compute numerator and denominator", t0, args.run_name)
 if args.sim_type == "fossil":
     for x_i in range(g.IFG_SIZE[args.sim_type]):
         vals = ifgs[:, x_i] * w_noise
@@ -79,14 +80,6 @@ else:
 
 t0 = utils.log_step("compute m_ifg", t0, args.run_name)
 mask = denominator == 0
-
-hp.mollview(numerator[:, 100], title="Numerator at frequency index 100", coord=["E", "G"], min=0,
-            max=200)
-plt.show()
-hp.mollview(denominator[:, 100], title="Denominator at frequency index 100", coord=["E", "G"],
-            min=0, max=200)
-plt.savefig(f"../output/white_noise/{args.sim_type}/denominator.png")
-print(f"Saved denominator map to ../output/white_noise/{args.sim_type}/denominator.png.")
 
 m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
 m_ifg[~mask] = numerator[~mask] / denominator[~mask]
