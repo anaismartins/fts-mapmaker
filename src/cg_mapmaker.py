@@ -164,9 +164,10 @@ if __name__ == "__main__":
         ifgs = ifgs / g.N_IFGS
         ifgs = np.roll(ifgs, -360, axis=1)
 
-    t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+    t0 = utils.log_step("ang2pix", t0, args.run_name)
     pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True).flatten()
 
+    t0 = utils.log_step("compute b", t0, args.run_name)
     b = calculate_b(ifgs, pix, sigma)
 
     # set M to be the hits map
@@ -179,14 +180,13 @@ if __name__ == "__main__":
     rms_map = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
     for pix_i in range(pix.shape[0] // g.IFG_SIZE[args.sim_type]):
         for x_i in range(g.IFG_SIZE[args.sim_type]):
-            rms_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += (1 / sigma[
-                pix_i * g.IFG_SIZE[args.sim_type] + x_i] ** 2)
+            rms_map[pix[pix_i * g.IFG_SIZE[args.sim_type] + x_i], x_i] += (1 / sigma ** 2)
     rms_map = np.sqrt(rms_map.flatten())
 
     x0 = np.zeros_like(b)
     for i in range(g.IFG_SIZE[args.sim_type]):
         x0[g.NPIX[args.sim_type] * i : g.NPIX[args.sim_type] * (i + 1)] = hp.read_map(
-            f"../output/white_noise_mapmaker/{args.sim_type}/ifg_maps/ifg_{i:04d}.fits")
+            f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
 
     x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map, x=x0, save_path="../output/cg/")
 
