@@ -5,8 +5,6 @@ or in more simple terms we solve
     A x = b
 """
 
-import os
-import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time as _time
 
@@ -80,7 +78,7 @@ def A_dot_x(x, pointing, sigma, npix=g.NPIX[args.sim_type]):
 
 
 def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10,
-                                      npix=g.NPIX[args.sim_type], save_path=None):
+                                      npix=g.NPIX[args.sim_type], t0=None):
     if x is None:
         x = np.zeros_like(b)
     else:
@@ -100,19 +98,8 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
     delta_new = np.dot(r.T, d)
     delta0 = delta_new
 
-    # clear output from previous runs
-    if save_path is not None:
-        if os.path.exists(f"{save_path}maps/"):
-            shutil.rmtree(f"{save_path}maps/")
-        os.makedirs(f"{save_path}maps/")
-        if os.path.exists(f"{save_path}ifg/"):
-            shutil.rmtree(f"{save_path}ifg/")
-        os.makedirs(f"{save_path}ifg/")
-        if os.path.exists(f"{save_path}res_ifg/"):
-            shutil.rmtree(f"{save_path}res_ifg/")
-        os.makedirs(f"{save_path}res_ifg/")
-
     for i in range(maxiter):
+        t0 = utils.log_step(f"PCG iteration {i+1}/{maxiter}", t0, args.run_name)
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
         q = A_dot_x(d, pointing, sigma, npix=npix)
@@ -188,7 +175,8 @@ if __name__ == "__main__":
         x0[g.NPIX[args.sim_type] * i : g.NPIX[args.sim_type] * (i + 1)] = hp.read_map(
             f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
 
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map, x=x0, save_path="../output/cg/")
+    t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map, x=x0, t0=t0)
 
     x = x.reshape((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]))
     m = np.real(np.fft.rfft(x, axis=1))
