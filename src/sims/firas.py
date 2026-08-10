@@ -4,6 +4,7 @@ This means it assumes the FIRAS scanning speed, as well as the on-board coadding
 """
 
 import os
+from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
@@ -27,6 +28,18 @@ t00 = _time()
 
 dust_map_Mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
 sed = np.nan_to_num(sed)
+
+if args.plots == "debug":
+    dust = np.multiply.outer(dust_map_Mjy, sed)
+
+    dust_map_dir = "../output/sims/firas/dust_maps"
+    t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
+    args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
+
+    t0 = utils.log_step("save_dust_maps", t0, args.run_name)
+    with Pool(processes=args.nworkers) as pool:
+        list(pool.imap_unordered(utils._save_one_map, args_list))
+    print(f"Saved dust maps to {dust_map_dir}.")
 
 t0 = utils.log_step("irfft", t0, args.run_name)
 sed_ifg = np.fft.irfft(sed)

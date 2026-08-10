@@ -115,12 +115,12 @@ def generate_frequencies(simtype, channel='ll', mode='ss', nfreq=None):
         dnu = 15.0 # GHz
 
         if nfreq == None:
-            nu0 = 60.0 # GHz
+            nu0 = 60 # GHz
             f_ghz = np.arange(nu0, 2000, dnu)
 
-        elif nfreq == 129: # 134 * 2 = 268 
+        elif nfreq == 129:
             nu0 = 60
-            f_ghz = np.linspace(nu0, dnu * nfreq, nfreq)
+            f_ghz = np.linspace(nu0, nu0 + dnu * (nfreq - 1), nfreq)
             print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz.")
 
         else:

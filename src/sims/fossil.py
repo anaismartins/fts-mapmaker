@@ -105,6 +105,23 @@ if args.plots == "debug":
     plt.close()
     print(f"Saved IFG {n} to {ifg_dir}.")
 
+if args.plots == "debug" or args.plots == "paper_only":
+    # plot showing how a full IFG is built from frankenstein-ing together different IFGs. shows where each pixel starts and ends in the final IFG.
+    pix_ifg = pix_ecl_fossil[n]
+    for i in range(len(pix_ifg)):
+        if pix_ifg[i] != pix_ifg[i - 1]:
+            plt.axvline(i, color="red", alpha=0.5)
+
+    plt.plot(ifg_scanning[n])
+    # plt.vlines(, ymin=ifg_scanning[n].min(), ymax=ifg_scanning[n].max(), color="red", alpha=0.5, label="Pixel boundaries")
+    # plt.title(f"IFG {n} with pixel boundaries")
+    plt.ylabel("Interferogram")
+    plt.xlabel("IFG sample index")
+    # plt.legend()
+    plt.savefig(f"{ifg_dir}/{n}_with_pixel_boundaries.png")
+    plt.close()
+    print(f"Saved IFG {n} with pixel boundaries to {ifg_dir}.")
+
 # plot pixels hit on a map
 # Create a two-panel figure: full sky + zoomed view
 if args.plots == "debug" or args.plots == "paper_only":

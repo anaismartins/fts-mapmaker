@@ -60,10 +60,11 @@ def calculate_b_numba(d, pointing, sigma, n_pix, n_ifg):
         return _calculate_b_numba_sigma_scalar(d, pointing, float(sigma_arr), n_pix, n_ifg)
     return _calculate_b_numba_sigma_vector(d, pointing, sigma_arr, n_pix, n_ifg)
 
-def A_dot_x_vectorised(x, pointing, sigma, n_pix, n_ifg):
+def A_dot_x_vectorised(x, pointing, sigma, n_pix, n_ifg, t0):
     """
     Vectorised implementation of A @ x.
     """
+    t0 = utils.log_step("A_dot_x_vectorised", t0, args.run_name)
     x_grid = x.reshape((n_pix, n_ifg))
 
     # 1) Gather: map each sample to the corresponding x entry
@@ -90,8 +91,7 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
     sigma = np.asarray(sigma, dtype=np.float64)
     precond = np.asarray(precond, dtype=np.float64)
 
-    t0 = utils.log_step("A_dot_x_vectorised", t0, args.run_name)
-    Ax = A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
+    Ax = A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs, t0=t0)
 
     r = b - Ax
 
@@ -106,14 +106,14 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
         t0 = utils.log_step(f"q A_dot_x_vectorised ({i})", t0, args.run_name)
-        q = A_dot_x_vectorised(d, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
+        q = A_dot_x_vectorised(d, pointing, sigma, n_pix=npix, n_ifg=n_ifgs, t0=t0)
 
         alpha = delta_new / np.dot(d.T, q)
 
         x += alpha * d
 
         if i % 50 == 0:
-            r = b - A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
+            r = b - A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs, t0=t0)
         else:
             r -= alpha * q
 
@@ -185,10 +185,12 @@ if __name__ == "__main__":
 
     rms_maps = compute_rms_map(pix, sigma, n_pix, n_ifgs, t0)
 
-    x0 = np.zeros_like(b)
+    # The CG operator uses pixel-major flattening: idx = pix * n_ifg + ifg.
+    # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
+    x0_grid = np.zeros((n_pix, n_ifgs), dtype=np.float64)
     for i in range(n_ifgs):
-        x0[n_pix * i : n_pix * (i + 1)] = hp.read_map(
-            f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
+        x0_grid[:, i] = hp.read_map(f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
+    x0 = x0_grid.ravel()
 
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
     x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0)

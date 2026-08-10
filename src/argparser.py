@@ -13,4 +13,5 @@ parser.add_argument("--run-name", type=str, default="profiling.txt", help="Name 
 parser.add_argument("--noise", action="store_false", help="Add no noise to the simulated IFGs.")
 parser.add_argument("--sim-type", type=str, help="Type of simulation to run." \
                     "Options are: 'fossil', 'firas'. One of the options must be specified.")
+parser.add_argument("--cg-dummy", action="store_true", help="Run the comparison using a dummy CG map.")
 args = parser.parse_args()

@@ -3,13 +3,17 @@
 run_name="fossil_sim_v38"
 mode="debug" #"release"
 
-owls=(owl{39..46}.uio.no)
-nworkers=(128 128 128 128 128 128 128 128)
+owl1=owl{36..37}.uio.no
+owl2=owl{39..46}.uio.no
+owls=(owl1 owl2)
+len=${#owls[@]}
 
+nworkers=(64 128)
 
-for i in "${!owls[@]}"; do
-  v="${owls[$i]}"
-  if [[ "$HOSTNAME" == *"${v%%.*}"* || "$HOSTNAME" == "$v" ]]; then
+for (( i=0; i<${len}; i++ )); do
+  c=${!owls[$i]}
+  v=$(eval "echo $c")
+  if [[ "$v" == *"$HOSTNAME"* ]]; then
     nworker="${nworkers[$i]}"
     break
   fi
