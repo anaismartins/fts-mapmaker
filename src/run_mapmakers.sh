@@ -4,7 +4,7 @@ set -euo pipefail
 
 sim_type="fossil"
 mapmaker_type="cg"
-version="v7"
+version="v8_check_if_same"
 
 run_name="${mapmaker_type}_${sim_type}_${version}"
 
