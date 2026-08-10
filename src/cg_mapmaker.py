@@ -277,7 +277,7 @@ if __name__ == "__main__":
         nfreq = 257
     else:
         raise ValueError("Unknown sim_type")
-    frequencies = spectra.generate_frequencies(nfreq=nfreq)
+    frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
     with ThreadPoolExecutor(max_workers=args.nworkers) as executor:
         futures = []
