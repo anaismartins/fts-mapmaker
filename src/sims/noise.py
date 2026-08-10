@@ -31,4 +31,5 @@ def white_noise(ntod, simtype):
         sigma_Mjy = (sigma_uerg.to(u.MJy / u.sr)).value
 
     noise = np.random.normal(0, sigma_Mjy, (ntod, g.IFG_SIZE[simtype]))
+    print(f"Generated white noise with sigma = {sigma_Mjy:.3f} MJy/sr.")
     return noise, sigma_Mjy

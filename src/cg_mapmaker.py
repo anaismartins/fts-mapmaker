@@ -5,10 +5,10 @@ or in more simple terms we solve
     A x = b
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time as _time
 
 import healpy as hp
+import matplotlib.pyplot as plt
 import numba as nb
 import numpy as np
 
@@ -18,83 +18,47 @@ import utils
 from argparser import args
 
 
-def calculate_b(d, pointing, sigma, t0):
-    """
-    Calculate the vector b = P^T N^{-1} d.
-
-    Returns
-    -------
-    np.ndarray
-        The vector b.
-    """
-    n_ifgs = g.IFG_SIZE[args.sim_type]
-
-    t0 = utils.log_step("calculate N_inv_d", _time(), args.run_name)
-    N_inv_d = d.flatten() / sigma**2
-
-    t0 = utils.log_step("initialize b", t0, args.run_name)
-    b = np.zeros((g.NPIX[args.sim_type], n_ifgs), dtype=np.float64)
-    t0 = utils.log_step("compute b", t0, args.run_name)
-    for pix_i in range(d.shape[0]):
-        for x_i in range(d.shape[1]):
-            b[pointing[pix_i * n_ifgs + x_i], x_i] += N_inv_d[pix_i * n_ifgs + x_i]
-
-    return b.flatten(), t0
-
 @nb.njit(parallel=True, fastmath=True)
-def calculate_b_numba(d, pointing, sigma, n_pix, n_ifg):
-    """
-    Numba‑accelerated version of calculate_b.
-    Returns a flattened array of length n_pix * n_ifg.
-    """
+def _calculate_b_numba_sigma_scalar(d, pointing, sigma_scalar, n_pix, n_ifg):
+    """Numba kernel for scalar sigma."""
     L = d.size
+    d_flat = d.ravel()
+    inv_sigma2 = 1.0 / (sigma_scalar * sigma_scalar)
     b = np.zeros((n_pix, n_ifg), dtype=np.float64)
 
     for i in nb.prange(L):
         pix = pointing[i]
         ifg = i % n_ifg
-        b[pix, ifg] += d.ravel()[i] / sigma[i]**2
+        b[pix, ifg] += d_flat[i] * inv_sigma2
 
     return b.ravel()
 
 
+@nb.njit(parallel=True, fastmath=True)
+def _calculate_b_numba_sigma_vector(d, pointing, sigma, n_pix, n_ifg):
+    """Numba kernel for per-sample sigma."""
+    L = d.size
+    d_flat = d.ravel()
+    sigma_flat = sigma.ravel()
+    b = np.zeros((n_pix, n_ifg), dtype=np.float64)
 
-def A_dot_x(x, pointing, sigma, npix=g.NPIX[args.sim_type]):
+    for i in nb.prange(L):
+        pix = pointing[i]
+        ifg = i % n_ifg
+        b[pix, ifg] += d_flat[i] / (sigma_flat[i] * sigma_flat[i])
+
+    return b.ravel()
+
+
+def calculate_b_numba(d, pointing, sigma, n_pix, n_ifg):
     """
-    Calculate the matrix-vector product A x = P^T N^{-1} P x.
-
-    Parameters
-    ----------
-    x : np.ndarray
-        The vector x (the map).
-    pix : np.ndarray
-        The pointing matrix in pixel space.
-    sigma : np.ndarray
-        The noise standard deviation for each time sample.
-
-    Returns
-    -------
-    np.ndarray
-        The result of the matrix-vector product A x.
+    Numba-accelerated version of calculate_b.
+    Returns a flattened array of length n_pix * n_ifg.
     """
-    n_ifgs = g.IFG_SIZE[args.sim_type]
-
-    x = x.reshape((npix, n_ifgs))
-
-    Px = np.zeros((pointing.shape[0] // n_ifgs, n_ifgs),
-                  dtype=np.float64)
-    for pix_i in range(pointing.shape[0] // n_ifgs):
-        for x_i in range(n_ifgs):
-            Px[pix_i, x_i] = x[pointing[pix_i * n_ifgs + x_i], x_i]
-
-    N_inv_Px = Px.flatten() / sigma**2
-
-    A_x = np.zeros((npix, n_ifgs), dtype=np.float64)
-    for pix_i in range(pointing.shape[0] // n_ifgs):
-        for x_i in range(n_ifgs):
-            A_x[pointing[pix_i * n_ifgs + x_i], x_i] += N_inv_Px[pix_i * n_ifgs + x_i]
-
-    return A_x.flatten()
+    sigma_arr = np.asarray(sigma)
+    if sigma_arr.ndim == 0:
+        return _calculate_b_numba_sigma_scalar(d, pointing, float(sigma_arr), n_pix, n_ifg)
+    return _calculate_b_numba_sigma_vector(d, pointing, sigma_arr, n_pix, n_ifg)
 
 def A_dot_x_vectorised(x, pointing, sigma, n_pix, n_ifg):
     """
@@ -126,14 +90,9 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
     sigma = np.asarray(sigma, dtype=np.float64)
     precond = np.asarray(precond, dtype=np.float64)
 
-    t0 = utils.log_step("A_dot_x", t0, args.run_name)
-    Ax = A_dot_x(x, pointing, sigma, npix=npix)
     t0 = utils.log_step("A_dot_x_vectorised", t0, args.run_name)
-    _Ax = A_dot_x_vectorised(x, pointing, sigma, npix=npix, n_ifg=n_ifgs)
-    if not np.allclose(Ax, _Ax):
-        raise ValueError("A_dot_x and A_dot_x_vectorised are not equal!")
-    else:
-        print("A_dot_x and A_dot_x_vectorised are equal!")
+    Ax = A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
+
     r = b - Ax
 
     d = np.zeros_like(r)
@@ -146,21 +105,15 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
         t0 = utils.log_step(f"PCG iteration {i+1}/{maxiter}", t0, args.run_name)
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
-        t0 = utils.log_step(f"q A_dot_x ({i})", t0, args.run_name)
-        q = A_dot_x(d, pointing, sigma, npix=npix)
         t0 = utils.log_step(f"q A_dot_x_vectorised ({i})", t0, args.run_name)
-        _q = A_dot_x_vectorised(d, pointing, sigma, npix=npix, n_ifg=n_ifgs)
-        if not np.allclose(q, _q):
-            raise ValueError("q and _q are not equal!")
-        else:
-            print("q and _q are equal!")
+        q = A_dot_x_vectorised(d, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
 
         alpha = delta_new / np.dot(d.T, q)
 
         x += alpha * d
 
         if i % 50 == 0:
-            r = b - A_dot_x(x, pointing, sigma, npix=npix)
+            r = b - A_dot_x_vectorised(x, pointing, sigma, n_pix=npix, n_ifg=n_ifgs)
         else:
             r -= alpha * q
 
@@ -183,7 +136,8 @@ def compute_hits_map(pointing, n_pix, n_ifg):
     np.add.at(hits, (pointing, freq_idx), 1)
     return hits.ravel()
 
-def compute_rms_map(pointing, sigma, n_pix, n_ifg):
+def compute_rms_map(pointing, sigma, n_pix, n_ifg, t0):
+    t0 = utils.log_step("compute_rms_map", t0, args.run_name)
     rms = np.zeros((n_pix, n_ifg), dtype=np.float64)
     freq_idx = np.arange(pointing.size) % n_ifg
     invsigma2 = 1.0 / sigma**2
@@ -211,53 +165,25 @@ if __name__ == "__main__":
     t0 = utils.log_step("load sigma", t0, args.run_name)
     sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-    t0 = utils.log_step("roll", t0, args.run_name)
     if args.sim_type == "fossil":
+        t0 = utils.log_step("roll", t0, args.run_name)
         ifgs = np.roll(ifgs, -180, axis=1)
     elif args.sim_type == "firas":
+        t0 = utils.log_step("divide by n_ifgs", t0, args.run_name)
         ifgs = ifgs / g.N_IFGS
+        t0 = utils.log_step("roll", t0, args.run_name)
         ifgs = np.roll(ifgs, -360, axis=1)
 
     t0 = utils.log_step("ang2pix", t0, args.run_name)
     pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True).flatten()
 
-    b, t0 = calculate_b(ifgs, pix, sigma, t0)
     t0 = utils.log_step("calculate b_numba", t0, args.run_name)
-    _b = calculate_b_numba(ifgs, pix, sigma, n_pix, n_ifgs)
-
-    # compare b and _b
-    if not np.allclose(b, _b):
-        raise ValueError("b and _b are not equal!")
-    else:
-        print("b and _b are equal!")
-
-    # set M to be the hits map
-    t0 = utils.log_step("compute hits map", t0, args.run_name)
-    hits_map = np.zeros((n_pix, n_ifgs))
-    for pix_i in range(pix.shape[0] // n_ifgs):
-        for x_i in range(n_ifgs):
-            hits_map[pix[pix_i * n_ifgs + x_i], x_i] += 1
-    hits_map = hits_map.flatten()
+    b = calculate_b_numba(ifgs, pix, sigma, n_pix, n_ifgs)
 
     t0 = utils.log_step("compute hits map vectorised", t0, args.run_name)
-    _hit_maps = compute_hits_map(pix, n_pix, n_ifgs)
-    if not np.allclose(hits_map, _hit_maps):
-        raise ValueError("hits_map and _hit_maps are not equal!")
-    else:
-        print("hits_map and _hit_maps are equal!")
+    hit_maps = compute_hits_map(pix, n_pix, n_ifgs)
 
-    t0 = utils.log_step("compute rms map", t0, args.run_name)
-    rms_map = np.zeros((n_pix, n_ifgs))
-    for pix_i in range(pix.shape[0] // n_ifgs):
-        for x_i in range(n_ifgs):
-            rms_map[pix[pix_i * n_ifgs + x_i], x_i] += (1 / sigma ** 2)
-    rms_map = np.sqrt(rms_map.flatten())
-    t0 = utils.log_step("compute rms map vectorised", t0, args.run_name)
-    _rms_maps = compute_rms_map(pix, sigma, n_pix, n_ifgs)
-    if not np.allclose(rms_map, _rms_maps):
-        raise ValueError("rms_map and _rms_maps are not equal!")
-    else:
-        print("rms_map and _rms_maps are equal!")
+    rms_maps = compute_rms_map(pix, sigma, n_pix, n_ifgs, t0)
 
     x0 = np.zeros_like(b)
     for i in range(n_ifgs):
@@ -265,7 +191,7 @@ if __name__ == "__main__":
             f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
 
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_map, x=x0, t0=t0)
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0)
 
     x = x.reshape((n_pix, n_ifgs))
     m = np.real(np.fft.rfft(x, axis=1))
@@ -279,16 +205,18 @@ if __name__ == "__main__":
         raise ValueError("Unknown sim_type")
     frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
-    with ThreadPoolExecutor(max_workers=args.nworkers) as executor:
-        futures = []
-        for nui, freq in enumerate(frequencies):
-            futures.append(executor.submit(utils.save_maps, freq, m[:, nui]))
-        # Ensure all are completed
-        for future in as_completed(futures):
-            future.result()
+    path = f"../output/cg/{args.sim_type}/"
+    for nui, freq in enumerate(frequencies):
+        if g.FITS:
+            hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
+        if g.PNG:
+            hp.mollview(m[:, nui], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=50,
+                        coord=["E", "G"])
+            plt.savefig(f"{path}{int(freq):04d}.png")
+            plt.close()
 
     t0 = utils.log_step("save_maps", t0, args.run_name)
-    print(f"Saved maps to ../output/binned/{args.sim_type}/.")
+    print(f"Saved maps to ../output/cg/{args.sim_type}/.")
         
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
         f.write("=" * 50 + "\n")

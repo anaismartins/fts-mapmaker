@@ -81,6 +81,16 @@ pix_ecl = hp.ang2pix(nside_dust, ecl_lon, ecl_lat, lonlat=True)
 t0 = utils.log_step("ang2pix fossil", t0, args.run_name)
 pix_ecl_fossil = hp.ang2pix(g.NSIDE["fossil"], ecl_lon, ecl_lat, lonlat=True)
 
+# plot hit map
+if args.plots == "debug" or args.plots == "paper_only":
+    npix = hp.nside2npix(g.NSIDE["fossil"])
+    map_pix = np.bincount(pix_ecl_fossil.flatten(), minlength=npix)
+    hp.mollview(map_pix, coord=["E", "G"], title="FOSSIL Scanning Strategy Hit map",
+                unit="Number of hits", min=0)
+    plt.savefig("../output/hit_maps/scanning_strategy_fossil_sim.png")
+    plt.close()
+    print("Saved pixel hit map for all IFGs to ../output/hit_maps/scanning_strategy_fossil_sim.png.")
+
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
 ifg_scanning = (dust_map_Mjy[pix_ecl] * sed_ifg_shifted).real
 
@@ -111,14 +121,14 @@ if args.plots == "debug" or args.plots == "paper_only":
     map_pix = np.bincount(row_pix, minlength=npix)
     vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
-    hp.mollview(map_pix, coord=["E", "G"], title="Pixels hit", cmap="RdYlGn", min=0, max=vmax, hold=True)
-    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
+    hp.mollview(map_pix, coord="E", title="Pixels hit", cmap="RdYlGn", min=0, max=vmax, hold=True)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
     ax2 = plt.subplot(1, 2, 2)
     hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Pixels hit", cmap="RdYlGn", min=0,
-                max=vmax, coord=["E", "G"], hold=True)
-    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord="E", hold=True)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x", ms=10)
 
     current_ax = plt.gca()
     current_ax.ticklabel_format(style="plain", axis="both")
@@ -161,7 +171,8 @@ np.save(f"{data_dir}/ifgs.npy", ifg_final)
 if args.noise:
     t0 = utils.log_step("save noise", t0, args.run_name)
     np.save(f"{data_dir}/noise.npy", sigma)
-print(f"Saved IFGs, pixel indices, and noise to {data_dir}.")
+print(f"Saved IFGs, pixel indices, and noise to {data_dir}. Number of generated IFGs was " 
+      f"{ifg_final.shape[0]}.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write("=" * 50 + "\n")

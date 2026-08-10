@@ -107,16 +107,15 @@ pix_ecl = hp.ang2pix(nside_dust, ecl_lons, ecl_lats, lonlat=True)
 t0 = utils.log_step("compute_pixel_indices nside firas", t0, args.run_name)
 pix_ecl_firas = hp.ang2pix(g.NSIDE["firas"], ecl_lons, ecl_lats, lonlat=True)
 
-npix = hp.nside2npix(nside_dust)
 if args.plots == "debug":
     t0 = utils.log_step("save_hit_map", t0, args.run_name)
-    hit_map = np.bincount(pix_ecl.flatten(), minlength=npix) / g.N_IFGS / g.NPIXPERIFG["firas"]
+    hit_map = np.bincount(pix_ecl_firas.flatten(), minlength=hp.nside2npix(g.NSIDE["firas"])
+                          ).astype(np.float64)
     mask = hit_map == 0
-    hit_map[mask] = np.nan
+    hit_map[mask] = hp.UNSEEN
     if g.PNG:
-        hp.mollview(hit_map, title="FIRAS Scanning Strategy Hit Map",
-                    unit="Hits per on-board IFG per pixel", min=0, max=332, xsize=2000,
-                    coord=["E", "G"])
+        hp.mollview(hit_map, title="FIRAS Scanning Strategy Hit Map", unit="Number of hits",
+                    coord=["E", "G"], format="%.0f", min=0, max=hit_map.max())
 
         plt.savefig("../output/hit_maps/scanning_strategy_firas_sim.png", facecolor=None,
                     bbox_inches="tight")
@@ -171,11 +170,12 @@ if args.plots == "debug" or args.plots == "paper_only":
     map_pix = np.bincount(row_pix.flatten(), minlength=npix)
     vmax = max(1, int(map_pix.max()))
 
-    # Left panel: full-sky mollview
+    # Left panel: full-sky mollviewƒ
     ax1 = plt.subplot(1, 2, 1)
     hp.mollview(map_pix, title="Pixels hit for one interferogram (Full Sky)", unit="Hits", min=0,
-                max=vmax, coord=["E", "G"], cmap="RdYlGn", hold=True)
-    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord="E", cmap="RdYlGn", hold=True)
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x",
+                ms=10)
 
     # Adjust left panel position to center it better
     ax1.set_position([0.05, 0.1, 0.4, 0.8])
@@ -183,8 +183,9 @@ if args.plots == "debug" or args.plots == "paper_only":
     # Right panel: zoomed gnomonic view centered on the pixel
     ax2 = plt.subplot(1, 2, 2)
     hp.gnomview(map_pix, rot=(lon_center, lat_center, 0), title="Zoomed view", unit="Hits", min=0,
-                max=vmax, coord=["E", "G"], cmap="RdYlGn", hold=True, xsize=800)
-    hp.projplot(lon_center, lat_center, coord=["E", "G"], color="blue", lonlat=True, marker="x", ms=10)
+                max=vmax, coord="E", cmap="RdYlGn", hold=True, xsize=800, format="%.0f")
+    hp.projplot(lon_center, lat_center, coord="E", color="blue", lonlat=True, marker="x",
+                ms=10)
 
     # Format the axes tick labels to avoid scientific notation on the right panel
     current_ax = plt.gca()
@@ -217,7 +218,8 @@ np.save("../output/data/firas/ecl_lat.npy", ecl_lats)
 np.save("../output/data/firas/ecl_lon.npy", ecl_lons)
 if args.noise:
     np.save("../output/data/firas/noise.npy", sigma)
-print("Saved FIRAS IFGs to ../output/data/firas/.")
+print(f"Saved FIRAS IFGs to ../output/data/firas/. A total of {total_ifg.shape[0]} IFGs were "
+      "generated.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write(f"{(_time() - t00)/60:.2f}\n")

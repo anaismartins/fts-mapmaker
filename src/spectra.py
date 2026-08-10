@@ -119,7 +119,7 @@ def generate_frequencies(simtype, channel='ll', mode='ss', nfreq=None):
             f_ghz = np.arange(nu0, 2000, dnu)
 
         elif nfreq == 129: # 134 * 2 = 268 
-            nu0 = 15
+            nu0 = 60
             f_ghz = np.linspace(nu0, dnu * nfreq, nfreq)
             print(f"Generated {nfreq} frequencies from {f_ghz[0]} to {f_ghz[-1]} GHz.")
 
@@ -130,3 +130,7 @@ def generate_frequencies(simtype, channel='ll', mode='ss', nfreq=None):
         raise ValueError("sim_type must be either 'firas' or 'fossil'")
 
     return f_ghz
+if __name__ == "__main__":
+    # test the function
+    f_ghz = generate_frequencies("fossil", nfreq=129)
+    print(f_ghz)
