@@ -12,7 +12,7 @@ from argparser import args
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for binned mapmaker for FOSSIL\n")
     f.write("=" * 50 + "\n")
-    f.write(f"{'load ifgs':<35} | ")
+    f.write(f"{'load ifgs':<40} | ")
 
 t00 = _time()
 t0 = _time()
@@ -53,6 +53,7 @@ if g.PNG:
     hp.mollview(hit_map, title="Scanning strategy hit map",
                 unit="Number of hits over the full mission", min=0, max=hit_map.max(), xsize=2000,
                 coord=["E", "G"])
+    t0 = utils.log_step("save_hit_map", t0, args.run_name)
     plt.savefig(f"../output/hit_maps/binned_{args.sim_type}.png")
     plt.close()
 
@@ -71,36 +72,27 @@ np.divide(m_ifg, hit_map[:, np.newaxis], out=m_ifg, where=~mask[:, np.newaxis])
 t0 = utils.log_step("set empty to nan", t0, args.run_name)
 m_ifg[mask] = np.nan
 
-t0 = utils.log_step("roll back", t0, args.run_name)
-if args.sim_type == "fossil":
-    m_ifg = np.roll(m_ifg, -180, axis=1)
-elif args.sim_type == "firas":
-    m_ifg = np.roll(m_ifg, -360, axis=1)
-else:
-    raise ValueError("args.sim_type must be 'fossil' or 'firas'")
-
 t0 = utils.log_step("rfft", t0, args.run_name)
 m = np.fft.rfft(m_ifg, axis=1).real
 
 frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], simtype=args.sim_type)
 
 # save m as maps
+t0 = utils.log_step("save_maps", t0, args.run_name)
 for nui in range(len(frequencies)):
     if g.FITS:
         hp.write_map(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.fits",
                      m[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
-            min=0, max=50,
-            # norm='hist',
-            xsize=2000, coord=["E", "G"])
+            min=0, max=50, xsize=2000, coord=["E", "G"])
         plt.savefig(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.png")
         plt.close()
         plt.clf()
 
-t0 = utils.log_step("save_maps", t0, args.run_name)
 print(f"Saved maps to ../output/binned/{args.sim_type}/.")
     
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    f.write(f"{(_time() - t0):0.2f}\n")
     f.write("=" * 50 + "\n")
     f.write(f"Total time for binned mapmaker: {(_time() - t00)/60:.2f} min\n")

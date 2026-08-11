@@ -150,7 +150,7 @@ if __name__ == "__main__":
     n_pix = g.NPIX[args.sim_type]
 
     with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
-        f.write("Profiling output for binned mapmaker for FOSSIL\n")
+        f.write("Profiling output for CG mapmaker for FOSSIL\n")
         f.write("=" * 50 + "\n")
         f.write(f"{'starting':<40} | ")
 
@@ -165,14 +165,9 @@ if __name__ == "__main__":
     t0 = utils.log_step("load sigma", t0, args.run_name)
     sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-    if args.sim_type == "fossil":
-        t0 = utils.log_step("roll", t0, args.run_name)
-        ifgs = np.roll(ifgs, -180, axis=1)
-    elif args.sim_type == "firas":
+    if args.sim_type == "firas":
         t0 = utils.log_step("divide by n_ifgs", t0, args.run_name)
         ifgs = ifgs / g.N_IFGS
-        t0 = utils.log_step("roll", t0, args.run_name)
-        ifgs = np.roll(ifgs, -360, axis=1)
 
     t0 = utils.log_step("ang2pix", t0, args.run_name)
     pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True).flatten()
@@ -221,5 +216,6 @@ if __name__ == "__main__":
     print(f"Saved maps to ../output/cg/{args.sim_type}/.")
         
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+        f.write(f"{(_time() - t0):.2f}\n")
         f.write("=" * 50 + "\n")
-        f.write(f"Total time for binned mapmaker: {(_time() - t00)/60:.2f} min\n")
+        f.write(f"Total time for CG mapmaker: {(_time() - t00)/60:.2f} min\n")

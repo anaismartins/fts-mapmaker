@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="firas_sim_v30"
+run_name="firas_sim_v31"
 mode="debug" # "release"
 
 owls=(owl{39..46}.uio.no)

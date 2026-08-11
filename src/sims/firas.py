@@ -44,9 +44,6 @@ if args.plots == "debug":
 t0 = utils.log_step("irfft", t0, args.run_name)
 sed_ifg = np.fft.irfft(sed)
 
-t0 = utils.log_step("roll sed_ifg", t0, args.run_name)
-sed_ifg = np.roll(sed_ifg, 360)
-
 t0 = utils.log_step("multiply dust map", t0, args.run_name)
 ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
 

@@ -20,7 +20,7 @@ import utils
 from argparser import args
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
-    f.write("Profiling output for binned mapmaker for FOSSIL\n")
+    f.write("Profiling output for white noise mapmaker for FOSSIL\n")
     f.write("=" * 50 + "\n")
     f.write(f"{'starting':<40} | ")
 
@@ -35,12 +35,7 @@ ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
 t0 = utils.log_step("load sigma", t0, args.run_name)
 sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-t0 = utils.log_step("roll", t0, args.run_name)
-if args.sim_type == "fossil":
-    ifgs = np.roll(ifgs, -180, axis=1)
-elif args.sim_type == "firas":
-    ifgs = np.roll(ifgs, -360, axis=1)
-
+if args.sim_type == "firas":
     t0 = utils.log_step("divide ifgs by N_IFGS", t0, args.run_name)
     ifgs = ifgs / g.N_IFGS
     
@@ -118,3 +113,8 @@ for nui, freq in enumerate(frequencies):
         plt.savefig(f"{path}{int(freq):04d}.png")
         plt.close()
 print(f"Saved maps to {path}.")
+
+with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    f.write(f"{(_time() - t0):0.2f}\n")
+    f.write("=" * 50 + "\n")
+    f.write(f"Total time for white noise mapmaker: {(_time() - t00)/60:.2f} min\n")

@@ -33,3 +33,10 @@ def white_noise(ntod, simtype):
     noise = np.random.normal(0, sigma_Mjy, (ntod, g.IFG_SIZE[simtype]))
     print(f"Generated white noise with sigma = {sigma_Mjy:.3f} MJy/sr.")
     return noise, sigma_Mjy
+
+def noise_1f(sigma, frequencies, knee_frequency, alpha):
+    """
+    Generates 1/f (and white) noise.
+    """
+
+    psd = sigma ** 2 * (1 + (np.abs(frequencies) / knee_frequency) ** alpha)

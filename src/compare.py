@@ -38,19 +38,14 @@ ratio_binned = binned_map / dust_map
 ratio_white_noise = white_noise_map / dust_map
 ratio_cg = cg_map / dust_map
 
-fig, axs = plt.subplots(3, 2, figsize=(12, 18))
-hp.mollview(difference_binned, title="Binned - Dust", sub=(3, 2, 1), min=-0.1, max=0.1, cbar=False,
-            coord=["E", "G"])
-hp.mollview(ratio_binned, title="Binned / Dust", sub=(3, 2, 2), min=0.9, max=1.1, cbar=False,
-            coord=["E", "G"])
-hp.mollview(difference_white_noise, title="White Noise - Dust", sub=(3, 2, 3), min=-0.1, max=0.1,
-            cbar=False,coord=["E", "G"])
-hp.mollview(ratio_white_noise, title="White Noise / Dust", sub=(3, 2, 4), min=0.9, max=1.1,
-            cbar=False, coord=["E", "G"])
-hp.mollview(difference_cg, title="CG - Dust", sub=(3, 2, 5), min=-0.1, max=0.1, cbar=False,
-            coord=["E", "G"])
-hp.mollview(ratio_cg, title="CG / Dust", sub=(3, 2, 6), min=0.9, max=1.1, cbar=False,
-            coord=["E", "G"])
+fig = plt.figure(figsize=(12, 4))
+hp.mollview(difference_binned/dust_map, title="Binned - Dust", sub=(1, 3, 1), min=-0.1, max=0.1,
+            cbar=False, coord=["E", "G"], cmap="RdBu_r")
+hp.mollview(difference_white_noise/dust_map, title="White Noise - Dust", sub=(1, 3, 2), min=-0.1,
+            max=0.1, cbar=True,coord=["E", "G"], cmap="RdBu_r")
+hp.mollview(difference_cg/dust_map, title="CG - Dust", sub=(1, 3, 3), min=-0.1, max=0.1, cbar=False,
+            coord=["E", "G"], cmap="RdBu_r")
+
 plt.tight_layout()
 plt.savefig(f"../output/compare/{args.sim_type}.png")
 plt.close()
