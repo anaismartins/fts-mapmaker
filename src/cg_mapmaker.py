@@ -196,7 +196,7 @@ if __name__ == "__main__":
     x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0)
 
     x = x.reshape((n_pix, n_ifgs))
-    m = np.real(np.fft.rfft(x, axis=1))
+    m = np.fft.rfft(x, axis=1).real
 
     # use the solution of the white noise mapmaker as x0
     if args.sim_type == "fossil":

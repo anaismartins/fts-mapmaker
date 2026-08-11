@@ -80,10 +80,7 @@ else:
     raise ValueError("args.sim_type must be 'fossil' or 'firas'")
 
 t0 = utils.log_step("rfft", t0, args.run_name)
-m = np.fft.rfft(m_ifg, axis=1)
-
-t0 = utils.log_step("taking real part", t0, args.run_name)
-m_final = m.real
+m = np.fft.rfft(m_ifg, axis=1).real
 
 frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], simtype=args.sim_type)
 
@@ -91,9 +88,9 @@ frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], sim
 for nui in range(len(frequencies)):
     if g.FITS:
         hp.write_map(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.fits",
-                     m_final[:, nui], overwrite=True, dtype=np.float64)
+                     m[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
-        hp.mollview(m_final[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
+        hp.mollview(m[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
             min=0, max=50,
             # norm='hist',
             xsize=2000, coord=["E", "G"])

@@ -5,9 +5,9 @@ import sys
 import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-from sims.utils import sim_dust
 
 import globals as g
+import spectra
 from argparser import args
 
 current = os.path.dirname(os.path.realpath(__file__))
@@ -129,16 +129,32 @@ def plot_simulated_hit_map():
     plt.savefig("test_output/hit_map.png")
     plt.close()
 
+def plot_output_sed():
+    # plot amplitufde of the galactic center over frequency
+    frequencies = spectra.generate_frequencies("fossil", nfreq=129)
+
+    sed = np.zeros(len(frequencies))
+    for nu_i, nu in enumerate(frequencies):
+        m = hp.read_map(f"../output/cg/fossil/{int(nu):04d}.fits")
+        sed[nu_i] = m[len(m) // 2]  # take the value at the center of the map
+
+    plt.plot(frequencies, sed)
+    plt.xlabel("Frequency [GHz]")
+    plt.ylabel("Amplitude [MJy/sr]")
+    plt.title("SED of the Galactic Center")
+    plt.savefig("../output/debug/sed.png")
 
 if __name__ == "__main__":
     # open ifgs
     # ifg = np.load("test_output/ifgs.npz")['ifg']
     # plot_ifgs(ifg)
 
-    dust_map_downgraded_mjy, frequencies, signal = sim_dust(simtype=args.sim_type)
+    # dust_map_downgraded_mjy, frequencies, signal = sim_dust(simtype=args.sim_type)
 
-    plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal)
+    # plot_dust_maps(dust_map_downgraded_mjy, frequencies, signal)
     # # plot_m_invert(frequencies)
     # plot_m_cg_per_tod(frequencies)
 
     # plot_simulated_hit_map()
+
+    plot_output_sed()

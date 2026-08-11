@@ -8,6 +8,9 @@ assuming there is only white noise i.e. N is diagonal, which means the equation 
 from time import time as _time
 
 import healpy as hp
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -95,8 +98,8 @@ for nui in range(g.IFG_SIZE[args.sim_type]):
         plt.savefig(f"../output/white_noise/{args.sim_type}/ifg_maps/{nui:04d}.png")
         plt.close()
 
-m = np.abs(np.fft.rfft(m_ifg, axis=1))
-phase = np.angle(np.fft.rfft(m_ifg, axis=1))
+# Keep only the real spectral component to match the mapmaking convention.
+m = np.fft.rfft(m_ifg, axis=1).real
 
 if args.sim_type == "fossil":
     nfreq = 129

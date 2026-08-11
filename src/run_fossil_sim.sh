@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="fossil_sim_v38"
+run_name="fossil_sim_v39"
 mode="debug" #"release"
 
 owl1=owl{36..37}.uio.no

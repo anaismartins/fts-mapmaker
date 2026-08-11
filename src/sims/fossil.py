@@ -69,8 +69,6 @@ if args.plots == "debug":
 # now we frankenstein the IFGs together
 t0 = utils.log_step("prepare shift", t0, args.run_name)
 n_cols = sed_ifg.shape[0]
-col_idx = (np.arange(n_cols) + 180) % n_cols
-sed_ifg_shifted = sed_ifg[col_idx]
 
 # col_idx = np.arange(pix_ecl.shape[1])
 # get the pixel at the NSIDE that the dust map is at for each IFG
@@ -92,7 +90,7 @@ if args.plots == "debug" or args.plots == "paper_only":
     print("Saved pixel hit map for all IFGs to ../output/hit_maps/scanning_strategy_fossil_sim.png.")
 
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
-ifg_scanning = (dust_map_Mjy[pix_ecl] * sed_ifg_shifted).real
+ifg_scanning = (dust_map_Mjy[pix_ecl] * sed_ifg).real
 
 n = random.randrange(ifg_scanning.shape[0])
 if args.plots == "debug":
