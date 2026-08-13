@@ -85,12 +85,12 @@ m_ifg[mask] = np.nan
 
 for nui in range(g.IFG_SIZE[args.sim_type]):
     if g.FITS:
-        hp.write_map(f"../output/white_noise/{args.sim_type}/ifg_maps/{nui:04d}.fits",
+        hp.write_map(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{nui:04d}.fits",
                      m_ifg[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m_ifg[:, nui], title=f"IFG {nui:04d}", unit="MJy/sr", min=0, max=50, xsize=2000,
                     coord=["E", "G"])
-        plt.savefig(f"../output/white_noise/{args.sim_type}/ifg_maps/{nui:04d}.png")
+        plt.savefig(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{nui:04d}.png")
         plt.close()
 
 # Keep only the real spectral component to match the mapmaking convention.
@@ -102,7 +102,7 @@ elif args.sim_type == "firas":
     nfreq = 257
 frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
-path = f"../output/white_noise/{args.sim_type}/maps/"
+path = f"../output/noise_weighted/{args.sim_type}/maps/"
 for nui, freq in enumerate(frequencies):
     if g.FITS:
         hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)

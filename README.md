@@ -30,15 +30,3 @@ src/*_mapmaker.py Mapmaker entry points
 ```
 
 Within `output/`, the current script convention is to keep cached pointings and derived products grouped by simulation type, for example `output/data/`, `output/sims/ifgs_fossil/`, and `output/dust_maps/fossil/`. That keeps heavy generated files out of the source tree while still making the pipeline outputs easy to find.
-
-## Running the mapmaker
-
-There are a few available mapmakers. The most recent one is the `white_noise_mapmaker` which you can run by using:
-
-```
-python white_noise_mapmaker.py
-```
-
-## Compare mapmakers
-
-The `compare.py` is a basis script for comparing the results of the different mapmakers between themselves and with the originally simulated data (without noise).

@@ -87,6 +87,7 @@ if args.plots == "debug" or args.plots == "paper_only":
                 unit="Number of hits", min=0)
     plt.savefig("../output/hit_maps/scanning_strategy_fossil_sim.png")
     plt.close()
+    hp.write_map("../output/hit_maps/scanning_strategy_fossil_sim.fits", map_pix, overwrite=True)
     print("Saved pixel hit map for all IFGs to ../output/hit_maps/scanning_strategy_fossil_sim.png.")
 
 t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)

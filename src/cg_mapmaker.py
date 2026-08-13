@@ -61,12 +61,14 @@ def calculate_b_numba(d, pointing, sigma, n_pix, ifg_size):
         return _calculate_b_numba_sigma_scalar(d, pointing, float(sigma_arr), n_pix, ifg_size)
     return _calculate_b_numba_sigma_vector(d, pointing, sigma_arr, n_pix, ifg_size)
 
-def A_dot_x(x, pointing, sigma, n_pix, t0):
+# @nb.njit(parallel=True, fastmath=True)
+def A_dot_x(x, pointing, sigma, n_pix):
     """
     Implementation of A @ x.
     """
-    t0 = utils.log_step("A_dot_x", t0, args.run_name)
     x = x.reshape((n_pix, g.IFG_SIZE[args.sim_type], g.N_IFGS))
+    if args.plots == "debug":
+        print(f"x shape: {x.shape}, x has nans: {np.isnan(x).any()}")
 
     Pm = np.zeros((pointing.shape[0], g.IFG_SIZE[args.sim_type], g.N_IFGS), dtype=np.float64)
     for ifg_i in range(g.N_IFGS):
@@ -74,11 +76,13 @@ def A_dot_x(x, pointing, sigma, n_pix, t0):
             for pix_i in range(n_pix):
                 Pm[pointing[pix_i, x_i, ifg_i], x_i, ifg_i] = x[pix_i, x_i, ifg_i]
 
+    if args.plots == "debug":
+        print(f"Pm shape: {Pm.shape}, Pm has nans: {np.isnan(Pm).any()}")
+
     # 2) Weight
     NPm = Pm / sigma**2
 
     if args.plots == "debug":
-        print(f"Pm shape: {Pm.shape}, Pm has nans: {np.isnan(Pm).any()}")
         print(f"NPm shape: {NPm.shape}, NPm has nans: {np.isnan(NPm).any()}")
 
     # 3) Scatter back
@@ -94,7 +98,8 @@ def A_dot_x(x, pointing, sigma, n_pix, t0):
 def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10,
                                       npix=g.NPIX[args.sim_type], t0=None):
 
-    Ax = A_dot_x(x, pointing, sigma, n_pix=npix, t0=t0).ravel()
+    t0 = utils.log_step("A_dot_x", t0, args.run_name)
+    Ax = A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
     b = b.ravel()
     if args.plots == "debug":
         print(f"b shape: {b.shape}, b has nans: {np.isnan(b).any()}")
@@ -116,14 +121,14 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
         t0 = utils.log_step(f"q A_dot_x ({i})", t0, args.run_name)
-        q = A_dot_x(d, pointing, sigma, n_pix=npix, t0=t0).ravel()
+        q = A_dot_x(d, pointing, sigma, n_pix=npix).ravel()
 
         alpha = delta_new / np.dot(d.T, q)
 
         x = x.ravel() + alpha * d.ravel()
 
         if i % 50 == 0:
-            r = b - A_dot_x(x, pointing, sigma, n_pix=npix, t0=t0).ravel()
+            r = b - A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
         else:
             r -= alpha * q
 
@@ -214,11 +219,33 @@ if __name__ == "__main__":
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0_grid = np.zeros((n_pix, ifg_size), dtype=np.float64)
     for i in range(ifg_size):
-        x0_grid[:, i] = hp.read_map(f"../output/white_noise/{args.sim_type}/ifg_maps/{i:04d}.fits")
+        x0_grid[:, i] = hp.read_map(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{i:04d}.fits")
     x0 = np.tile(x0_grid, g.N_IFGS).reshape((n_pix, ifg_size, g.N_IFGS))
 
+    # x0 has some nans, so we will pop those and also remove the corresponding from b and rms_maps
+    if args.plots == "debug":
+        print(f"x0 shape: {x0.shape}, x0 has nans: {np.isnan(x0).any()}")
+        print(f"b shape: {b.shape}, b has nans: {np.isnan(b).any()}")
+        print(f"rms_maps shape: {rms_maps.shape}, rms_maps has nans: {np.isnan(rms_maps).any()}")
+
+    if np.isnan(x0).any():
+        nan_idx = np.isnan(x0)
+
+        n_nans = np.sum(nan_idx[:, 0, 0])  # count nans in the first IFG and first IFG sample
+        print(f"Found {n_nans} nans in x0, removing them from x0, b, and rms_maps.")
+        x0 = np.delete(x0, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
+        b = np.delete(b, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
+        rms_maps = np.delete(rms_maps, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
+        if args.plots == "debug":
+            print(f"x0 shape after removing nans: {x0.shape}, x0 has nans: {np.isnan(x0).any()}")
+            print(f"b shape after removing nans: {b.shape}, b has nans: {np.isnan(b).any()}")
+            print(f"rms_maps shape after removing nans: {rms_maps.shape}, rms_maps has nans: "
+                f"{np.isnan(rms_maps).any()}")
+            print(f"Number of nans removed: {np.sum(nan_idx)}")
+
+
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0)
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0, npix=n_pix-n_nans)
 
     x = x.reshape((n_pix, ifg_size))
     m = np.fft.rfft(x, axis=1).real

@@ -2,7 +2,7 @@ from matplotlib import rc, rcParams
 
 # common setup for matplotlib
 params = {'text.usetex' : True,
-          'font.size' : 25,
+          'font.size' : 20,
           'font.family' : 'lmodern',
         #   'text.latex.unicode': True,
           'backend': 'pdf',
