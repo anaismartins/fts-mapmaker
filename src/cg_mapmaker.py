@@ -95,7 +95,7 @@ def A_dot_x(x, pointing, sigma, n_pix):
 
     return Ax.ravel()
 
-def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-10,
+def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-5,
                                       npix=g.NPIX[args.sim_type], t0=None):
 
     t0 = utils.log_step("A_dot_x", t0, args.run_name)
@@ -229,26 +229,16 @@ if __name__ == "__main__":
         print(f"rms_maps shape: {rms_maps.shape}, rms_maps has nans: {np.isnan(rms_maps).any()}")
 
     if np.isnan(x0).any():
-        nan_idx = np.isnan(x0)
-
-        n_nans = np.sum(nan_idx[:, 0, 0])  # count nans in the first IFG and first IFG sample
-        print(f"Found {n_nans} nans in x0, removing them from x0, b, and rms_maps.")
-        x0 = np.delete(x0, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
-        b = np.delete(b, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
-        rms_maps = np.delete(rms_maps, np.where(nan_idx))#.reshape(((n_pix-n_nans), ifg_size, g.N_IFGS))
-        if args.plots == "debug":
-            print(f"x0 shape after removing nans: {x0.shape}, x0 has nans: {np.isnan(x0).any()}")
-            print(f"b shape after removing nans: {b.shape}, b has nans: {np.isnan(b).any()}")
-            print(f"rms_maps shape after removing nans: {rms_maps.shape}, rms_maps has nans: "
-                f"{np.isnan(rms_maps).any()}")
-            print(f"Number of nans removed: {np.sum(nan_idx)}")
-
+        nan_mask = np.isnan(x0)
+        x0 = np.nan_to_num(x0, nan=0.0)
 
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps, x=x0, t0=t0, npix=n_pix-n_nans)
+    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps,
+                                          x=x0, t0=t0, npix=n_pix)
 
     x = x.reshape((n_pix, ifg_size))
     m = np.fft.rfft(x, axis=1).real
+    m[nan_mask] = hp.UNSEEN
 
     # use the solution of the white noise mapmaker as x0
     if args.sim_type == "fossil":
