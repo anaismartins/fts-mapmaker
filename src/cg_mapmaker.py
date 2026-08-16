@@ -67,8 +67,6 @@ def A_dot_x(x, pointing, sigma, n_pix):
     Implementation of A @ x.
     """
     x = x.reshape((n_pix, g.IFG_SIZE[args.sim_type], g.N_IFGS))
-    if args.plots == "debug":
-        print(f"x shape: {x.shape}, x has nans: {np.isnan(x).any()}")
 
     Pm = np.zeros((pointing.shape[0], g.IFG_SIZE[args.sim_type], g.N_IFGS), dtype=np.float64)
     for ifg_i in range(g.N_IFGS):
@@ -76,14 +74,8 @@ def A_dot_x(x, pointing, sigma, n_pix):
             for pix_i in range(n_pix):
                 Pm[pointing[pix_i, x_i, ifg_i], x_i, ifg_i] = x[pix_i, x_i, ifg_i]
 
-    if args.plots == "debug":
-        print(f"Pm shape: {Pm.shape}, Pm has nans: {np.isnan(Pm).any()}")
-
     # 2) Weight
     NPm = Pm / sigma**2
-
-    if args.plots == "debug":
-        print(f"NPm shape: {NPm.shape}, NPm has nans: {np.isnan(NPm).any()}")
 
     # 3) Scatter back
     Ax = np.zeros_like(x)
@@ -101,13 +93,8 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
     t0 = utils.log_step("A_dot_x", t0, args.run_name)
     Ax = A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
     b = b.ravel()
-    if args.plots == "debug":
-        print(f"b shape: {b.shape}, b has nans: {np.isnan(b).any()}")
-        print(f"Ax shape: {Ax.shape}, Ax has nans: {np.isnan(Ax).any()}")
 
     r = b - Ax
-    if args.plots == "debug":
-        print(f"r shape: {r.shape}, r has nans: {np.isnan(r).any()}")
 
     d = np.zeros_like(r)
     precond = precond.ravel()
@@ -140,6 +127,39 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
 
         beta = delta_new / delta_old
         d = s + beta * d
+
+        if delta_new < tol**2 * delta0:
+            break
+    return x
+
+def conjugate_gradient(b, pointing, sigma, x=None, maxiter=1000, tol=1e-5, npix=g.NPIX[args.sim_type]):
+    """
+    Conjugate gradient solver for Ax = b.
+    """
+    Ax = A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
+    b = b.ravel()
+    r = b - Ax
+    d = r.copy()
+    delta_new = np.dot(r.T, r)
+    delta0 = delta_new
+
+    for i in range(maxiter):
+        eps = delta_new / delta0 if delta0 != 0 else 0.0
+        print(f"CG iteration {i+1}/{maxiter}, eps={eps}")
+        q = A_dot_x(d, pointing, sigma, n_pix=npix).ravel()
+        alpha = delta_new / np.dot(d.T, q)
+        x = x.ravel() + alpha * d.ravel()
+
+        if i % 50 == 0:
+            r = b - A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
+        else:
+            r -= alpha * q
+
+        delta_old = delta_new
+        delta_new = np.dot(r.T, r)
+
+        beta = delta_new / delta_old
+        d = r + beta * d
 
         if delta_new < tol**2 * delta0:
             break
@@ -190,19 +210,9 @@ if __name__ == "__main__":
         # repeat the IFGs 16 times to match the pointing array size
         t0 = utils.log_step("repeat ifgs", t0, args.run_name)
         ifgs = np.tile(ifgs, g.N_IFGS).reshape(ecl_lon.shape)
-        print(f"ifgs shape after repeat: {ifgs.shape}")
-
-    if args.plots == "debug":
-        # check if there are any nans and check sizes
-        print(f"ifgs shape: {ifgs.shape}, ecl_lon shape: {ecl_lon.shape}, ecl_lat shape: "
-              f"{ecl_lat.shape}, sigma shape: {sigma.shape}")
-        print(f"ifgs has nans: {np.isnan(ifgs).any()}, ecl_lon has nans: {np.isnan(ecl_lon).any()}, "
-              f"ecl_lat has nans: {np.isnan(ecl_lat).any()}, sigma has nans: {np.isnan(sigma).any()}")
 
     t0 = utils.log_step("ang2pix", t0, args.run_name)
     pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
-    if args.plots == "debug":
-        print(f"pix shape: {pix.shape}, pix has nans: {np.isnan(pix).any()}")
 
     t0 = utils.log_step("calculate b_numba", t0, args.run_name)
     b = calculate_b_numba(ifgs, pix, sigma, n_pix, ifg_size)
@@ -212,9 +222,6 @@ if __name__ == "__main__":
         plt.savefig("../output/debug/b_map.png")
         plt.close()
 
-    t0 = utils.log_step("compute_rms_map", t0, args.run_name)
-    rms_maps = compute_rms_map(pix, sigma, n_pix, ifg_size)
-
     # The CG operator uses pixel-major flattening: idx = pix * n_ifg + ifg.
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0_grid = np.zeros((n_pix, ifg_size), dtype=np.float64)
@@ -222,19 +229,19 @@ if __name__ == "__main__":
         x0_grid[:, i] = hp.read_map(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{i:04d}.fits")
     x0 = np.tile(x0_grid, g.N_IFGS).reshape((n_pix, ifg_size, g.N_IFGS))
 
-    # x0 has some nans, so we will pop those and also remove the corresponding from b and rms_maps
-    if args.plots == "debug":
-        print(f"x0 shape: {x0.shape}, x0 has nans: {np.isnan(x0).any()}")
-        print(f"b shape: {b.shape}, b has nans: {np.isnan(b).any()}")
-        print(f"rms_maps shape: {rms_maps.shape}, rms_maps has nans: {np.isnan(rms_maps).any()}")
-
     if np.isnan(x0).any():
         nan_mask = np.isnan(x0)
         x0 = np.nan_to_num(x0, nan=0.0)
 
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
-    x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps,
-                                          x=x0, t0=t0, npix=n_pix)
+    if args.sim_type == "fossil":
+        t0 = utils.log_step("compute_rms_map", t0, args.run_name)
+        rms_maps = compute_rms_map(pix, sigma, n_pix, ifg_size)
+
+        x = preconditioned_conjugate_gradient(b, pix, sigma, rms_maps,
+                                            x=x0, t0=t0, npix=n_pix)
+    elif args.sim_type == "firas":
+        x = conjugate_gradient(b, pix, sigma, x=x0, npix=n_pix)
 
     x = x.reshape((n_pix, ifg_size))
     m = np.fft.rfft(x, axis=1).real
