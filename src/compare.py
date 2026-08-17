@@ -3,6 +3,7 @@ Script to compare the dust simulation with the original FIRAS maps.
 """
 
 import multiprocessing
+from functools import partial
 from time import time as _time
 
 import healpy as hp
@@ -14,6 +15,22 @@ import setup_matplotlib
 import spectra
 import utils
 from argparser import args
+
+
+def overlay_contour(mask, coord=None, colors="yellow", linewidths=1.0):
+    """Draw the outline of a binary HEALPix mask on the current healpy projection axes.
+
+    matplotlib's contour needs a 2D array in the projection plane, so the mask is first
+    projected with the projector of the axes made by the preceding mollview call. Pass the
+    same coord as that mollview call so the rotation matches.
+    """
+    ax = plt.gca()
+    nside = hp.npix2nside(len(mask))
+    img = ax.proj.projmap(mask, partial(hp.vec2pix, nside), coord=coord)
+    # pixels outside the projection disc come back as -inf; NaN is ignored by contour
+    img = np.where(np.isfinite(img), img, np.nan)
+    return ax.contour(img, levels=[0.5], extent=ax.proj.get_extent(), origin="lower",
+                      colors=colors, linewidths=linewidths)
 
 
 def sum_chi2(nu_i):
@@ -64,7 +81,14 @@ if __name__ == "__main__":
     dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
 
     # get contour of the galaxy by making a snr cut
-    snr_cut = 25
+    snr_cut = 10
+    galaxy_mask = np.zeros_like(dust_map)
+    galaxy_mask[dust_map > snr_cut] = 1
+    if args.plots == "debug":
+        hp.mollview(dust_map, title="Galaxy Contour", min=0, max=50, cbar=False, coord=["E", "G"])
+        overlay_contour(galaxy_mask, coord=["E", "G"], colors="red", linewidths=1.5)
+        plt.savefig(f"../output/debug/{args.sim_type}_galaxy_contour.png")
+        plt.close()
 
     binned_map = hp.read_map(f"../output/binned/{args.sim_type}/{ref_freq:04d}.fits")
     noise_weighted_map = hp.read_map(f"../output/noise_weighted/{args.sim_type}/maps/{ref_freq:04d}.fits")
@@ -81,25 +105,28 @@ if __name__ == "__main__":
 
     mask = (~np.isfinite(hit_map) | (hit_map <= 0) | (hit_map == hp.UNSEEN))
 
-    difference_binned[mask] = hp.UNSEEN
-    difference_noise_weighted[mask] = hp.UNSEEN
-    difference_cg[mask] = hp.UNSEEN
+    rel_binned = difference_binned / dust_map
+    rel_noise_weighted = difference_noise_weighted / dust_map
+    rel_cg = difference_cg / dust_map
 
-    hp.mollview(difference_binned/dust_map, title="Binned", min=-max, max=max, cbar=False,
+    for m in (rel_binned, rel_noise_weighted, rel_cg):
+        m[mask] = hp.UNSEEN
+
+    hp.mollview(rel_binned, title="Binned", min=-max, max=max, cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_binned.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned.png")
     plt.close()
 
-    hp.mollview(difference_noise_weighted/dust_map, title="Noise Weighted", min=-max, max=max, cbar=True,
+    hp.mollview(rel_noise_weighted, title="Noise Weighted", min=-max, max=max, cbar=True,
                 coord=["E", "G"], cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted.png")
     plt.close()
 
-    hp.mollview(difference_cg/dust_map, title="CG", min=-max, max=max, cbar=False, coord=["E", "G"],
+    hp.mollview(rel_cg, title="CG", min=-max, max=max, cbar=False, coord=["E", "G"],
                 cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_cg.pdf")
@@ -109,7 +136,8 @@ if __name__ == "__main__":
     # calculate the chi2 -- we want to sum over frequencies so we need to load all the maps
     t0 = utils.log_step("generate frequencies", t0, args.run_name)
     frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=g.SPEC_SIZE[args.sim_type])
-    print(f"Generated {len(frequencies)} frequencies from {frequencies[0]} to {frequencies[-1]} GHz.")
+    print(f"Generated {len(frequencies)} frequencies from {int(frequencies[0])} to "
+          f"{int(frequencies[-1])} GHz.")
 
     # Source - https://stackoverflow.com/a/9786225
     # Posted by Sven Marnach, modified by community. See post 'Timeline' for change history
@@ -132,27 +160,32 @@ if __name__ == "__main__":
     chi2_binned = sgn_binned * np.log10(sq_weight_binned)
     chi2_binned[mask] = hp.UNSEEN
     chi2_noise_weighted = sgn_noise_weighted * np.log10(sq_weight_noise_weighted)
+    chi2_noise_weighted[mask] = hp.UNSEEN
     chi2_cg = sgn_cg * np.log10(sq_weight_cg)
+    chi2_cg[mask] = hp.UNSEEN
 
     if args.sim_type == "fossil":
-        max_chi2 = -5
+        max_chi2 = 5
     elif args.sim_type == "firas":
         max_chi2 = 150
 
     hp.mollview(chi2_binned, title="Binned", min=-max_chi2, max=max_chi2, cbar=False,
                 coord="E", cmap="RdBu_r")
+    overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.png")
     plt.close()
 
     hp.mollview(chi2_noise_weighted, title="Noise Weighted", min=-max_chi2, max=max_chi2, cbar=True,
                 coord="E", cmap="RdBu_r")
+    overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted_chi2.png")
     plt.close() 
 
     hp.mollview(chi2_cg, title="CG", min=-max_chi2, max=max_chi2, cbar=False, coord="E",
                 cmap="RdBu_r")
+    overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.png")
     plt.close()

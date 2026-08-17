@@ -208,7 +208,7 @@ def cg_scipy(pointing):
     A = LinearOperator((n_pix * ifg_size * n_ifgs, n_pix * ifg_size * n_ifgs), matvec=lambda x:
                        A_dot_x(x, pointing, sigma, n_pix))
 
-    x, info = cg(A, b.ravel(), x0=x0.ravel(), maxiter=1000, tol=1e-5, M=invv_map)
+    x, _ = cg(A, b.ravel(), x0=x0.ravel(), maxiter=1000, tol=1e-5, M=invv_map)
     return x
 
 def test_symmetry(pointing):
@@ -226,7 +226,7 @@ def test_symmetry(pointing):
 
     print(f"Symmetry test: lhs={lhs}, rhs={rhs}, diff={lhs - rhs}")
 
-@nb.njit(parallel=True, fastmath=True)
+# @nb.njit(parallel=True, fastmath=True)
 def compute_inv_variance_map(pointing, sigma, n_pix, ifg_size):
     invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
 
@@ -235,7 +235,11 @@ def compute_inv_variance_map(pointing, sigma, n_pix, ifg_size):
     for ifg_i in range(g.N_IFGS):
             for x_i in range(ifg_size):
                 for data_point_i in range(pointing.shape[0]):
-                    pix = pointing[data_point_i, x_i, ifg_i]
+                    if args.sim_type == "fossil":
+                        pix = pointing[data_point_i, x_i]
+                    elif args.sim_type == "firas":
+                        pix = pointing[data_point_i, x_i, ifg_i]
+
                     if sigma.ndim == 0:
                         invv[pix, x_i] += invsigma2
                     else:
@@ -264,10 +268,6 @@ if __name__ == "__main__":
     t0 = utils.log_step("load sigma", t0, args.run_name)
     sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-    if args.sim_type == "firas":
-        t0 = utils.log_step("divide by n_ifgs", t0, args.run_name)
-        ifgs = ifgs / g.N_IFGS
-
     t0 = utils.log_step("ang2pix", t0, args.run_name)
     pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
 
@@ -277,45 +277,30 @@ if __name__ == "__main__":
     t0 = utils.log_step("calculate b_numba", t0, args.run_name)
     b = calculate_b_numba(ifgs, pix, sigma, n_pix, ifg_size)
 
-    if args.plots == "debug":
-        hp.mollview(b[:, 256])
-        plt.savefig("../output/debug/b_map.png")
-        plt.close()
-
     # The CG operator uses pixel-major flattening: idx = pix * n_ifg + ifg.
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0 = np.zeros((n_pix, ifg_size), dtype=np.float64)
     for i in range(ifg_size):
         x0[:, i] = hp.read_map(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{i:04d}.fits")
 
-    if np.isnan(x0).any():
-        nan_mask = np.isnan(x0)
-        x0 = np.nan_to_num(x0, nan=0.0)
+    # NaNs mark pixels never hit by the scan, so the mask is per-pixel and
+    # survives the rFFT along the ifg axis.
+    bad_pix = np.isnan(x0).any(axis=1)
+    x0 = np.nan_to_num(x0, nan=0.0)
 
     t0 = utils.log_step("compute_inv_variance_map", t0, args.run_name)
     invv_map = compute_inv_variance_map(pix, sigma, n_pix, ifg_size)
 
-    print(f"shapes of b: {b.shape}, x0: {x0.shape}, invv_map: {invv_map.shape}, pix: {pix.shape}, sigma: {sigma.shape}")
-
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
-    # if args.sim_type == "fossil":
     x = preconditioned_conjugate_gradient(b, pix, sigma, invv_map,
                                             x=x0, t0=t0, npix=n_pix)
-    # elif args.sim_type == "firas":
-        # x = cg_scipy(pix)
 
     x = x.reshape((n_pix, ifg_size))
     m = np.fft.rfft(x, axis=1).real
-    m[nan_mask] = hp.UNSEEN
+    m[bad_pix, :] = hp.UNSEEN
 
-    # use the solution of the white noise mapmaker as x0
-    if args.sim_type == "fossil":
-        nfreq = 129
-    elif args.sim_type == "firas":
-        nfreq = 257
-    else:
-        raise ValueError("Unknown sim_type")
-    frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
+    frequencies = spectra.generate_frequencies(simtype=args.sim_type,
+                                               nfreq=g.SPEC_SIZE[args.sim_type])
 
     path = f"../output/cg/{args.sim_type}/"
     for nui, freq in enumerate(frequencies):
