@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-sim_type="fossil"
+sim_type="firas"
 version="v1"
 
 run_name="comparison_${sim_type}_${version}"

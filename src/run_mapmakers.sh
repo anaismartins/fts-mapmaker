@@ -4,7 +4,7 @@ set -euo pipefail
 
 sim_type="firas"
 mapmaker_type="cg"
-version="v8"
+version="v0"
 mode="debug" #"release"
 
 run_name="${mapmaker_type}_${sim_type}_${version}"

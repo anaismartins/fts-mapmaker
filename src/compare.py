@@ -63,6 +63,9 @@ if __name__ == "__main__":
     # downgrade dust map to the same resolution as the other maps
     dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
 
+    # get contour of the galaxy by making a snr cut
+    snr_cut = 25
+
     binned_map = hp.read_map(f"../output/binned/{args.sim_type}/{ref_freq:04d}.fits")
     noise_weighted_map = hp.read_map(f"../output/noise_weighted/{args.sim_type}/maps/{ref_freq:04d}.fits")
     if args.cg_dummy:
@@ -108,14 +111,6 @@ if __name__ == "__main__":
     frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=g.SPEC_SIZE[args.sim_type])
     print(f"Generated {len(frequencies)} frequencies from {frequencies[0]} to {frequencies[-1]} GHz.")
 
-    # t0 = utils.log_step("initialize chi2 arrays", t0, args.run_name)
-    # sq_weight_binned = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-    # sq_weight_noise_weighted = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-    # sq_weight_cg = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-    # sgn_binned = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-    # sgn_noise_weighted = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-    # sgn_cg = np.zeros((g.NPIX[args.sim_type]), dtype=float)
-
     # Source - https://stackoverflow.com/a/9786225
     # Posted by Sven Marnach, modified by community. See post 'Timeline' for change history
     # Retrieved 2026-08-15, License - CC BY-SA 4.0
@@ -134,12 +129,15 @@ if __name__ == "__main__":
     sgn_noise_weighted = np.sum(sgn_noise_weighted, axis=0)
     sgn_cg = np.sum(sgn_cg, axis=0)
 
-    chi2_binned = sgn_binned * sq_weight_binned
+    chi2_binned = sgn_binned * np.log10(sq_weight_binned)
     chi2_binned[mask] = hp.UNSEEN
-    chi2_noise_weighted = sgn_noise_weighted * sq_weight_noise_weighted
-    chi2_cg = sgn_cg * sq_weight_cg
+    chi2_noise_weighted = sgn_noise_weighted * np.log10(sq_weight_noise_weighted)
+    chi2_cg = sgn_cg * np.log10(sq_weight_cg)
 
-    max_chi2 = 0.00001
+    if args.sim_type == "fossil":
+        max_chi2 = -5
+    elif args.sim_type == "firas":
+        max_chi2 = 150
 
     hp.mollview(chi2_binned, title="Binned", min=-max_chi2, max=max_chi2, cbar=False,
                 coord="E", cmap="RdBu_r")
