@@ -117,7 +117,7 @@ def A_dot_x(x, pointing, sigma, n_pix):
                                           minlength=n_pix)
 
     # add regularization term to Ax
-    Ax += 1e-4 * x
+    Ax += 1e-2 * x
 
     return Ax.ravel()
 

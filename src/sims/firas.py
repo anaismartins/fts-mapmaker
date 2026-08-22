@@ -55,11 +55,11 @@ user = os.environ["USER"]
 data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
 sky_data = np.load(data_path, allow_pickle=True)
 
-mtm_speed = sky_data["mtm_speed"][:]
-mtm_length = sky_data["mtm_length"][:]
-ss_filter = (mtm_speed == 0) & (mtm_length == 0)
-ecl_lat = sky_data["ecl_lat"][ss_filter]
-ecl_lon = sky_data["ecl_lon"][ss_filter]
+# mtm_speed = sky_data["mtm_speed"][:]
+# mtm_length = sky_data["mtm_length"][:]
+# ss_filter = (mtm_speed == 0) & (mtm_length == 0)
+ecl_lat = sky_data["ecl_lat"]#[ss_filter]
+ecl_lon = sky_data["ecl_lon"]#[ss_filter]
 
 total_time = 55.36  # seconds
 flyback_time = 0.42  # seconds
