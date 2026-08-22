@@ -37,23 +37,23 @@ def sum_chi2(nu_i):
     dust_map = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{int(frequencies[nu_i]):04d}.fits")
     dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
 
-    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/{int(frequencies[nu_i]):04d}.fits")
-    noise_weighted_map = hp.read_map(f"../output/noise_weighted/{args.sim_type}/maps/{int(frequencies[nu_i]):04d}.fits")
+    legacy_map = hp.read_map(f"../output/legacy/{args.sim_type}/{int(frequencies[nu_i]):04d}.fits")
+    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/maps/{int(frequencies[nu_i]):04d}.fits")
     if args.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
         cg_map = hp.read_map(f"../output/cg/{args.sim_type}/{int(frequencies[nu_i]):04d}.fits")
 
+    sq_weight_legacy = ((dust_map - legacy_map)**2)/(hit_map**2)
     sq_weight_binned = ((dust_map - binned_map)**2)/(hit_map**2)
-    sq_weight_noise_weighted = ((dust_map - noise_weighted_map)**2)/(hit_map**2)
     sq_weight_cg = ((dust_map - cg_map)**2)/(hit_map**2)
 
+    sgn_legacy = dust_map - legacy_map
     sgn_binned = dust_map - binned_map
-    sgn_noise_weighted = dust_map - noise_weighted_map
     sgn_cg = dust_map - cg_map
 
-    return (sq_weight_binned, sq_weight_noise_weighted, sq_weight_cg, sgn_binned,
-            sgn_noise_weighted, sgn_cg)
+    return (sq_weight_legacy, sq_weight_binned, sq_weight_cg, sgn_legacy,
+            sgn_binned, sgn_cg)
 
 if __name__ == "__main__":
 
@@ -90,40 +90,40 @@ if __name__ == "__main__":
         plt.savefig(f"../output/debug/{args.sim_type}_galaxy_contour.png")
         plt.close()
 
-    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/{ref_freq:04d}.fits")
-    noise_weighted_map = hp.read_map(f"../output/noise_weighted/{args.sim_type}/maps/{ref_freq:04d}.fits")
+    legacy_map = hp.read_map(f"../output/legacy/{args.sim_type}/{ref_freq:04d}.fits")
+    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/maps/{ref_freq:04d}.fits")
     if args.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
         cg_map = hp.read_map(f"../output/cg/{args.sim_type}/{ref_freq:04d}.fits")
 
+    difference_legacy = legacy_map - dust_map
     difference_binned = binned_map - dust_map
-    difference_noise_weighted = noise_weighted_map - dust_map
     difference_cg = cg_map - dust_map
 
     hit_map = hp.read_map(f"../output/hit_maps/scanning_strategy_{args.sim_type}_sim.fits")
 
     mask = (~np.isfinite(hit_map) | (hit_map <= 0) | (hit_map == hp.UNSEEN))
 
+    rel_legacy = difference_legacy / dust_map
     rel_binned = difference_binned / dust_map
-    rel_noise_weighted = difference_noise_weighted / dust_map
     rel_cg = difference_cg / dust_map
 
-    for m in (rel_binned, rel_noise_weighted, rel_cg):
+    for m in (rel_legacy, rel_binned, rel_cg):
         m[mask] = hp.UNSEEN
 
-    hp.mollview(rel_binned, title="Binned", min=-max, max=max, cbar=False,
+    hp.mollview(rel_legacy, title="Legacy", min=-max, max=max, cbar=False,
+                coord=["E", "G"], cmap="RdBu_r")
+    # plt.tight_layout()
+    plt.savefig(f"../output/compare/{args.sim_type}_legacy.pdf")
+    plt.savefig(f"../output/compare/{args.sim_type}_legacy.png")
+    plt.close()
+
+    hp.mollview(rel_binned, title="Binned", min=-max, max=max, cbar=True,
                 coord=["E", "G"], cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_binned.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned.png")
-    plt.close()
-
-    hp.mollview(rel_noise_weighted, title="Noise Weighted", min=-max, max=max, cbar=True,
-                coord=["E", "G"], cmap="RdBu_r")
-    # plt.tight_layout()
-    plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted.png")
     plt.close()
 
     hp.mollview(rel_cg, title="CG", min=-max, max=max, cbar=False, coord=["E", "G"],
@@ -145,22 +145,22 @@ if __name__ == "__main__":
 
     t0 = utils.log_step("sum_chi2 function", t0, args.run_name)
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-    (sq_weight_binned, sq_weight_noise_weighted, sq_weight_cg, sgn_binned, sgn_noise_weighted,
+    (sq_weight_legacy, sq_weight_binned, sq_weight_cg, sgn_legacy, sgn_binned,
      sgn_cg) = zip(*pool.map(sum_chi2, range(len(frequencies))))
 
     t0 = utils.log_step("sum_chi2", t0, args.run_name)
+    sq_weight_legacy = np.sum(sq_weight_legacy, axis=0)
     sq_weight_binned = np.sum(sq_weight_binned, axis=0)
-    sq_weight_noise_weighted = np.sum(sq_weight_noise_weighted, axis=0)
     sq_weight_cg = np.sum(sq_weight_cg, axis=0)
 
+    sgn_legacy = np.sum(sgn_legacy, axis=0)
     sgn_binned = np.sum(sgn_binned, axis=0)
-    sgn_noise_weighted = np.sum(sgn_noise_weighted, axis=0)
     sgn_cg = np.sum(sgn_cg, axis=0)
 
+    chi2_legacy = sgn_legacy * np.log10(sq_weight_legacy)
+    chi2_legacy[mask] = hp.UNSEEN
     chi2_binned = sgn_binned * np.log10(sq_weight_binned)
     chi2_binned[mask] = hp.UNSEEN
-    chi2_noise_weighted = sgn_noise_weighted * np.log10(sq_weight_noise_weighted)
-    chi2_noise_weighted[mask] = hp.UNSEEN
     chi2_cg = sgn_cg * np.log10(sq_weight_cg)
     chi2_cg[mask] = hp.UNSEEN
 
@@ -169,18 +169,18 @@ if __name__ == "__main__":
     elif args.sim_type == "firas":
         max_chi2 = 150
 
-    hp.mollview(chi2_binned, title="Binned", min=-max_chi2, max=max_chi2, cbar=False,
+    hp.mollview(chi2_legacy, title="Legacy", min=-max_chi2, max=max_chi2, cbar=False,
+                coord="E", cmap="RdBu_r")
+    overlay_contour(galaxy_mask, coord="E")
+    plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.pdf")
+    plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.png")
+    plt.close()
+
+    hp.mollview(chi2_binned, title="Binned", min=-max_chi2, max=max_chi2, cbar=True,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.png")
-    plt.close()
-
-    hp.mollview(chi2_noise_weighted, title="Noise Weighted", min=-max_chi2, max=max_chi2, cbar=True,
-                coord="E", cmap="RdBu_r")
-    overlay_contour(galaxy_mask, coord="E")
-    plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted_chi2.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_noise_weighted_chi2.png")
     plt.close() 
 
     hp.mollview(chi2_cg, title="CG", min=-max_chi2, max=max_chi2, cbar=False, coord="E",

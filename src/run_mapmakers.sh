@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-sim_type="firas"
+sim_type="fossil"
 mapmaker_type="cg"
-version="v0"
+version="v18"
 mode="debug" #"release"
 
 run_name="${mapmaker_type}_${sim_type}_${version}"

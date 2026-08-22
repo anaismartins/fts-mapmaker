@@ -5,6 +5,8 @@ or in more simple terms we solve
     A x = b
 """
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from time import time as _time
 
 import healpy as hp
@@ -19,27 +21,16 @@ import utils
 from argparser import args
 
 
-# @nb.njit(parallel=True, fastmath=True)
-def _calculate_b_numba_sigma_scalar(d, pointing, sigma_scalar, n_pix, ifg_size):
-    """Numba kernel for scalar sigma."""
-    inv_sigma2 = 1.0 / (sigma_scalar * sigma_scalar)
+def ang2pix_threaded(nside, lon, lat, nworkers=6):
+    out = np.empty(lon.shape, dtype=np.int32)
+    bounds = np.linspace(0, lon.shape[0], nworkers + 1).astype(int)
+    def work(k):
+        s, e = bounds[k], bounds[k+1]
+        out[s:e] = hp.ang2pix(nside, lon[s:e], lat[s:e], lonlat=True)
+    with ThreadPoolExecutor(nworkers) as ex:
+        list(ex.map(work, range(nworkers)))
+    return out
 
-    N_inv_d = d * inv_sigma2
-
-    b = np.zeros((n_pix, ifg_size), dtype=np.float64)
-
-    n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
-
-    for ifg_i in range(n_ifgs):
-        for x_i in range(ifg_size):
-            for data_point_i in range(pointing.shape[0]):
-                if args.sim_type == "fossil":
-                    pix = pointing[data_point_i, x_i]
-                elif args.sim_type == "firas":
-                    pix = pointing[data_point_i, x_i, ifg_i]
-                b[pix, x_i] += N_inv_d[data_point_i, x_i]
-
-    return b
 
 
 @nb.njit(parallel=True, fastmath=True)
@@ -58,15 +49,35 @@ def _calculate_b_numba_sigma_vector(d, pointing, sigma, n_pix, ifg_size):
     return b.ravel()
 
 
-def calculate_b_numba(d, pointing, sigma, n_pix, ifg_size):
-    """
-    Numba-accelerated version of calculate_b.
-    Returns a flattened array of length n_pix * n_ifg.
-    """
+@nb.njit(parallel=True, fastmath=True)
+def _b_kernel_2d(d, pointing, inv_sigma2, n_pix, ifg_size):
+    """fossil: pointing is (ifg_size, n_data)"""
+    b = np.zeros((n_pix, ifg_size), dtype=np.float64)
+    for x_i in nb.prange(ifg_size):
+        for i in range(pointing.shape[1]):
+            b[pointing[x_i, i], x_i] += d[i, x_i] * inv_sigma2
+    return b
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _b_kernel_3d(d, pointing, inv_sigma2, n_pix, ifg_size, n_ifgs):
+    """firas: pointing is (ifg_size, n_data, n_ifgs)"""
+    b = np.zeros((n_pix, ifg_size), dtype=np.float64)
+    for x_i in nb.prange(ifg_size):
+        for ifg_i in range(n_ifgs):
+            for i in range(pointing.shape[1]):
+                b[pointing[x_i, i, ifg_i], x_i] += d[i, x_i] * inv_sigma2
+    return b
+
+
+def calculate_b_numba(d, pointing, sigma, n_pix, ifg_size, n_ifgs):
     sigma_arr = np.asarray(sigma)
-    if sigma_arr.ndim == 0:
-        return _calculate_b_numba_sigma_scalar(d, pointing, float(sigma_arr), n_pix, ifg_size)
-    return _calculate_b_numba_sigma_vector(d, pointing, sigma_arr, n_pix, ifg_size)
+    if sigma_arr.ndim != 0:
+        return _calculate_b_numba_sigma_vector(d, pointing, sigma_arr, n_pix, ifg_size)
+    inv_sigma2 = 1.0 / float(sigma_arr) ** 2
+    if pointing.ndim == 2:
+        return _b_kernel_2d(d, pointing, inv_sigma2, n_pix, ifg_size)
+    return _b_kernel_3d(d, pointing, inv_sigma2, n_pix, ifg_size, n_ifgs)
 
 # @nb.njit(parallel=True, fastmath=True)
 def A_dot_x(x, pointing, sigma, n_pix):
@@ -75,24 +86,15 @@ def A_dot_x(x, pointing, sigma, n_pix):
     """
     x = x.reshape((n_pix, g.IFG_SIZE[args.sim_type]))
 
-    Pm = np.zeros((pointing.shape[0], g.IFG_SIZE[args.sim_type]), dtype=np.float64)
-    # n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
-    # for ifg_i in range(n_ifgs):
-    #     for x_i in range(g.IFG_SIZE[args.sim_type]):
-    #         for pix_i in range(n_pix):
-    #             if args.sim_type == "fossil":
-    #                 pix = pointing[pix_i, x_i]
-    #             elif args.sim_type == "firas":
-    #                 pix = pointing[pix_i, x_i, ifg_i]
-    #             Pm[pix, x_i] = x[pix_i, x_i]
+    Pm = np.zeros((pointing.shape[1], g.IFG_SIZE[args.sim_type]), dtype=np.float64)
 
     if args.sim_type == "fossil":
         for x_i in range(g.IFG_SIZE[args.sim_type]):
-            Pm[:, x_i] = x[pointing[:, x_i], x_i]
+            Pm[:, x_i] = x[pointing[x_i], x_i]
     elif args.sim_type == "firas":
         for x_i in range(g.IFG_SIZE[args.sim_type]):
             for ifg_i in range(g.N_IFGS):
-                Pm[:, x_i] += x[pointing[:, x_i, ifg_i], x_i]
+                Pm[:, x_i] += x[pointing[x_i, :, ifg_i], x_i]
 
     # 2) Weight
     NPm = Pm / sigma**2
@@ -109,11 +111,11 @@ def A_dot_x(x, pointing, sigma, n_pix):
     #             Ax[pix, x_i] += NPm[data_point_i, x_i]
     if args.sim_type == "fossil":
         for x_i in range(g.IFG_SIZE[args.sim_type]):
-            Ax[:, x_i] = np.bincount(pointing[:, x_i], weights=NPm[:, x_i], minlength=n_pix)
+            Ax[:, x_i] = np.bincount(pointing[x_i], weights=NPm[:, x_i], minlength=n_pix)
     elif args.sim_type == "firas":
         for x_i in range(g.IFG_SIZE[args.sim_type]):
             for ifg_i in range(g.N_IFGS):
-                Ax[:, x_i] += np.bincount(pointing[:, x_i, ifg_i], weights=NPm[:, x_i],
+                Ax[:, x_i] += np.bincount(pointing[x_i, :, ifg_i], weights=NPm[:, x_i],
                                           minlength=n_pix)
 
     # add regularization term to Ax
@@ -226,24 +228,38 @@ def test_symmetry(pointing):
 
     print(f"Symmetry test: lhs={lhs}, rhs={rhs}, diff={lhs - rhs}")
 
-# @nb.njit(parallel=True, fastmath=True)
-def compute_inv_variance_map(pointing, sigma, n_pix, ifg_size):
+@nb.njit(parallel=True, fastmath=True)
+def compute_inv_variance_map_2d(pointing, sigma, n_pix, ifg_size, n_ifgs):
     invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
 
     invsigma2 = 1.0 / sigma**2
 
-    for ifg_i in range(g.N_IFGS):
-            for x_i in range(ifg_size):
-                for data_point_i in range(pointing.shape[0]):
-                    if args.sim_type == "fossil":
-                        pix = pointing[data_point_i, x_i]
-                    elif args.sim_type == "firas":
-                        pix = pointing[data_point_i, x_i, ifg_i]
+    for x_i in nb.range(ifg_size):
+        for data_point_i in range(pointing.shape[1]):
+            pix = pointing[x_i, data_point_i]
 
-                    if sigma.ndim == 0:
-                        invv[pix, x_i] += invsigma2
-                    else:
-                        invv[pix, x_i] += invsigma2[data_point_i, x_i, ifg_i]
+            if sigma.ndim == 0:
+                invv[pix, x_i] += invsigma2
+            else:
+                invv[pix, x_i] += invsigma2[data_point_i, x_i]
+
+    return invv
+
+@nb.njit(parallel=True, fastmath=True)
+def compute_inv_variance_map_3d(pointing, sigma, n_pix, ifg_size, n_ifgs):
+    invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
+
+    invsigma2 = 1.0 / sigma**2
+
+    for ifg_i in range(n_ifgs):
+        for x_i in nb.prange(ifg_size):
+            for data_point_i in range(pointing.shape[1]):
+                pix = pointing[x_i, data_point_i, ifg_i]
+
+                if sigma.ndim == 0:
+                    invv[pix, x_i] += invsigma2
+                else:
+                    invv[pix, x_i] += invsigma2[data_point_i, x_i, ifg_i]
 
     return invv
 
@@ -268,14 +284,23 @@ if __name__ == "__main__":
     t0 = utils.log_step("load sigma", t0, args.run_name)
     sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
-    t0 = utils.log_step("ang2pix", t0, args.run_name)
-    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)
+    if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy"):
+        t0 = utils.log_step("ang2pix", t0, args.run_name)
+        pix = ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat)
+        pix = np.swapaxes(pix, 0, 1)
+        pix = np.ascontiguousarray(pix)
+        np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy",
+                pix)
+    else:
+        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy", mmap_mode="r")
 
     # print("Testing symmetry")
     # test_symmetry(pix)
 
+    t0 = utils.log_step("calculate n_ifgs", t0, args.run_name)
+    n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
     t0 = utils.log_step("calculate b_numba", t0, args.run_name)
-    b = calculate_b_numba(ifgs, pix, sigma, n_pix, ifg_size)
+    b = calculate_b_numba(ifgs, pix, sigma, n_pix, ifg_size, n_ifgs)
 
     # The CG operator uses pixel-major flattening: idx = pix * n_ifg + ifg.
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
@@ -289,7 +314,10 @@ if __name__ == "__main__":
     x0 = np.nan_to_num(x0, nan=0.0)
 
     t0 = utils.log_step("compute_inv_variance_map", t0, args.run_name)
-    invv_map = compute_inv_variance_map(pix, sigma, n_pix, ifg_size)
+    if args.sim_type == "fossil":
+        invv_map = compute_inv_variance_map_2d(pix, sigma, n_pix, ifg_size, n_ifgs)
+    else:
+        invv_map = compute_inv_variance_map_3d(pix, sigma, n_pix, ifg_size, n_ifgs)
 
     t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
     x = preconditioned_conjugate_gradient(b, pix, sigma, invv_map,
