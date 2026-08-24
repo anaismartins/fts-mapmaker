@@ -234,7 +234,7 @@ def compute_inv_variance_map_2d(pointing, sigma, n_pix, ifg_size, n_ifgs):
 
     invsigma2 = 1.0 / sigma**2
 
-    for x_i in nb.range(ifg_size):
+    for x_i in nb.prange(ifg_size):
         for data_point_i in range(pointing.shape[1]):
             pix = pointing[x_i, data_point_i]
 
@@ -306,7 +306,7 @@ if __name__ == "__main__":
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0 = np.zeros((n_pix, ifg_size), dtype=np.float64)
     for i in range(ifg_size):
-        x0[:, i] = hp.read_map(f"../output/noise_weighted/{args.sim_type}/ifg_maps/{i:04d}.fits")
+        x0[:, i] = hp.read_map(f"../output/binned/{args.sim_type}/ifg_maps/{i:04d}.fits")
 
     # NaNs mark pixels never hit by the scan, so the mask is per-pixel and
     # survives the rFFT along the ifg axis.
