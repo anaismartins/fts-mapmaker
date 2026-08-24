@@ -16,6 +16,7 @@ import sims.dust_map as dust_map
 import sims.noise as noise
 import utils
 from argparser import args
+from pathlib import Path
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FIRAS simulation\n")
@@ -33,6 +34,7 @@ if args.plots == "debug":
     dust = np.multiply.outer(dust_map_Mjy, sed)
 
     dust_map_dir = "../output/sims/firas/dust_maps"
+    Path(f"{dust_map_dir}").mkdir(parents=True, exist_ok=True)
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
     args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
 
@@ -52,7 +54,7 @@ ifg = ifg.real
 
 t0 = utils.log_step("load_sky_data", t0, args.run_name)
 user = os.environ["USER"]
-data_path = f"/mn/stornext/d5/data/{user}/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
+data_path = f"/mn/stornext/d5/data/aimartin/firas-reanalysis/FIRAS-Pass5/data/preprocessed_sky_ll.npz"
 sky_data = np.load(data_path, allow_pickle=True)
 
 # mtm_speed = sky_data["mtm_speed"][:]
@@ -160,6 +162,7 @@ if args.plots == "debug":
     ax[1].set_title(f"Total IFG for pixel {n}")
     ax[1].set_ylabel("Interferogram")
     plt.tight_layout()
+    Path(f"../output/sims/firas/ifgs").mkdir(parents=True, exist_ok=True)
     plt.savefig(f"../output/sims/firas/ifgs/{n}.png")
     plt.close()
     print(f"Saved IFG {n} to ../output/sims/firas/ifgs/{n}.png.")
@@ -203,6 +206,7 @@ if args.plots == "debug" or args.plots == "paper_only":
     current_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
     current_ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
 
+    Path(f"../output/sims/firas/pix_hits").mkdir(parents=True, exist_ok=True)
     plt.savefig(f"../output/sims/firas/pix_hits/{n}.png", dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved pixel hit map for IFG {n} to ../output/sims/firas/pix_hits/{n}.png.")

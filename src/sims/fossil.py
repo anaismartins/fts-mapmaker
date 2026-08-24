@@ -25,9 +25,13 @@ import sims.noise as noise
 import sims.scanning_strategy as ss
 import utils
 from argparser import args
+from pathlib import Path
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
+
+if args.nworkers is None:
+    args.nworkers = os.cpu_count()
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
@@ -152,6 +156,7 @@ if args.plots == "debug" or args.plots == "paper_only":
     current_ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
 
     pix_hit_dir = "../output/sims/fossil/pix_hits"
+    Path(f"{pix_hit_dir}").mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{pix_hit_dir}/fossil_{n}.png")
     plt.close()
 
@@ -168,6 +173,9 @@ else:
     ifg_final = ifg_scanning
 
 if args.plots == "debug" and args.noise:
+
+    Path(f"{ifg_dir}").mkdir(parents=True, exist_ok=True)
+
     plt.plot(ifg_final[n], alpha=0.5, label="Signal + Noise")
     plt.plot(ifg_scanning[n], alpha=0.5, label="Signal")
     plt.plot(noise[n], alpha=0.5, label="Noise")
