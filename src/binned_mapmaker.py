@@ -1,6 +1,16 @@
+"""
+Maximum likelihood mapmaker that solves the equation
+    (P^T M^T N^{-1} M P) m = P^T M^T N^{-1} d,
+assuming there is only white noise i.e. N is diagonal, which means the equation reduces to
+    m = sum (d / sigma ^2) / sum (1 / sigma^2).
+"""
+
 from time import time as _time
 
 import healpy as hp
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -10,89 +20,101 @@ import utils
 from argparser import args
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
-    f.write("Profiling output for binned mapmaker for FOSSIL\n")
+    f.write("Profiling output for white noise mapmaker for FOSSIL\n")
     f.write("=" * 50 + "\n")
-    f.write(f"{'load ifgs':<40} | ")
+    f.write(f"{'starting':<40} | ")
 
 t00 = _time()
 t0 = _time()
 
+t0 = utils.log_step("load ifgs", t0, args.run_name)
 ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy", mmap_mode="r")
-t0 = utils.log_step("load_pointing", t0, args.run_name)
+t0 = utils.log_step("load pix", t0, args.run_name)
 ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
 ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
+t0 = utils.log_step("load sigma", t0, args.run_name)
+sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
 
 if args.sim_type == "firas":
+    t0 = utils.log_step("divide ifgs by N_IFGS", t0, args.run_name)
     ifgs = ifgs / g.N_IFGS
-
+    
+t0 = utils.log_step("initialize numerator and denominator", t0, args.run_name)
+# how many unique pixels are there?
+numerator = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
+denominator = np.zeros_like(numerator, dtype=float)
+# Vectorized accumulation: loop over IFG sample index (usually much smaller
+# than the number of IFGs) and use np.bincount to accumulate values per pixel.
+# This avoids the expensive Python-level loop over all IFGs and is much faster.
 t0 = utils.log_step("ang2pix", t0, args.run_name)
+pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)  
 
-# use only the middle pixel
-t0 = utils.log_step("select_middle_pixel", t0, args.run_name)
-mid_pix = g.NPIXPERIFG[args.sim_type] // 2
+t0 = utils.log_step("compute w_noise", t0, args.run_name)
+w_noise = 1.0 / sigma**2
+
+t0 = utils.log_step("compute numerator and denominator", t0, args.run_name)
 if args.sim_type == "fossil":
-    ecl_lon_mid = ecl_lon[:, mid_pix]
-    ecl_lat_mid = ecl_lat[:, mid_pix]
-    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon_mid, ecl_lat_mid, lonlat=True)
+    for x_i in range(g.IFG_SIZE[args.sim_type]):
+        vals = ifgs[:, x_i] * w_noise
+        
+        pix  = pix_grid[:, x_i]
+        # bincount returns length npix; fill the column x_i for numerator/denominator
+        numerator[:, x_i] = np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
+        denominator[:, x_i] = np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
+                                          minlength=g.NPIX[args.sim_type])
 elif args.sim_type == "firas":
-    mid_ifg = g.N_IFGS // 2
-    ecl_lon_mid = ecl_lon[:, mid_pix, mid_ifg]
-    ecl_lat_mid = ecl_lat[:, mid_pix, mid_ifg]
-    pix = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon_mid, ecl_lat_mid, lonlat=True)
+    for ifg_i in range(g.N_IFGS):
+        for x_i in range(g.IFG_SIZE[args.sim_type]):
+            vals = ifgs[:, x_i] * w_noise
+
+            pix = pix_grid[:, x_i, ifg_i]
+            
+            # bincount returns length npix; fill the column x_i for numerator/denominator
+            numerator[:, x_i] += np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
+            denominator[:, x_i] += np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
+                                               minlength=g.NPIX[args.sim_type])
 else:
-    raise ValueError("args.sim_type must be 'fossil' or 'firas'")
+    raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
-# plot hit map of the scanning strategy
-t0 = utils.log_step("create_hit_map", t0, args.run_name)
-npix = g.NPIX[args.sim_type]
-hit_map = np.bincount(pix, minlength=npix).astype(float)
-mask = hit_map == 0
-hit_map[mask] = hp.UNSEEN
-if g.PNG:
-    t0 = utils.log_step("plot_hit_map", t0, args.run_name)
-    hp.mollview(hit_map, title="Scanning strategy hit map",
-                unit="Number of hits over the full mission", min=0, max=hit_map.max(), xsize=2000,
-                coord=["E", "G"])
-    t0 = utils.log_step("save_hit_map", t0, args.run_name)
-    plt.savefig(f"../output/hit_maps/binned_{args.sim_type}.png")
-    plt.close()
+t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+mask = denominator == 0
 
-    print(f"Saved hit map of the scanning strategy to ../output/hit_maps/binned_{args.sim_type}.png.")
-
-pix = pix.astype(np.int64, copy=False)
-
-m_ifg = np.zeros((npix, g.IFG_SIZE[args.sim_type]), dtype=float)
-
-np.add.at(m_ifg, pix, ifgs)
-
-mask = hit_map == 0
-t0 = utils.log_step("divide_by_hit_map", t0, args.run_name)
-np.divide(m_ifg, hit_map[:, np.newaxis], out=m_ifg, where=~mask[:, np.newaxis])
-
-t0 = utils.log_step("set empty to nan", t0, args.run_name)
+m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
+m_ifg[~mask] = numerator[~mask] / denominator[~mask]
 m_ifg[mask] = np.nan
 
-t0 = utils.log_step("rfft", t0, args.run_name)
+for nui in range(g.IFG_SIZE[args.sim_type]):
+    if g.FITS:
+        hp.write_map(f"../output/binned/{args.sim_type}/ifg_maps/{nui:04d}.fits",
+                     m_ifg[:, nui], overwrite=True, dtype=np.float64)
+    if g.PNG:
+        hp.mollview(m_ifg[:, nui], title=f"IFG {nui:04d}", unit="MJy/sr", min=0, max=50, xsize=2000,
+                    coord=["E", "G"])
+        plt.savefig(f"../output/binned/{args.sim_type}/ifg_maps/{nui:04d}.png")
+        plt.close()
+
+# Keep only the real spectral component to match the mapmaking convention.
 m = np.fft.rfft(m_ifg, axis=1).real
 
-frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], simtype=args.sim_type)
+if args.sim_type == "fossil":
+    nfreq = 129
+elif args.sim_type == "firas":
+    nfreq = 257
+frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
-# save m as maps
-t0 = utils.log_step("save_maps", t0, args.run_name)
-for nui in range(len(frequencies)):
+path = f"../output/binned/{args.sim_type}/maps/"
+for nui, freq in enumerate(frequencies):
     if g.FITS:
-        hp.write_map(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.fits",
-                     m[:, nui], overwrite=True, dtype=np.float64)
-    if g.PNG:
-        hp.mollview(m[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
-            min=0, max=50, xsize=2000, coord=["E", "G"])
-        plt.savefig(f"../output/binned/{args.sim_type}/{int(frequencies[nui]):04d}.png")
-        plt.close()
-        plt.clf()
+        hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
 
-print(f"Saved maps to ../output/binned/{args.sim_type}/.")
-    
+    if g.PNG:
+        hp.mollview(m[:, nui], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=50,
+                    xsize=2000, coord=["E", "G"])
+        plt.savefig(f"{path}{int(freq):04d}.png")
+        plt.close()
+print(f"Saved maps to {path}.")
+
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write(f"{(_time() - t0):0.2f}\n")
     f.write("=" * 50 + "\n")
-    f.write(f"Total time for binned mapmaker: {(_time() - t00)/60:.2f} min\n")
+    f.write(f"Total time for white noise mapmaker: {(_time() - t00)/60:.2f} min\n")
