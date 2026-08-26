@@ -70,7 +70,7 @@ if __name__ == "__main__":
         max = 0.01
     elif args.sim_type == "firas":
         ref_freq = 544
-        max = 1
+        max = 2
     else:
         raise ValueError("args.sim_type must be 'fossil' or 'firas'")
 
@@ -104,29 +104,34 @@ if __name__ == "__main__":
     hit_map = hp.read_map(f"../output/hit_maps/scanning_strategy_{args.sim_type}_sim.fits")
 
     mask = (~np.isfinite(hit_map) | (hit_map <= 0) | (hit_map == hp.UNSEEN))
+    mask2 = (binned_map == hp.UNSEEN) | (binned_map == 0) | (np.isnan(binned_map))
 
     rel_legacy = difference_legacy / dust_map
     rel_binned = difference_binned / dust_map
     rel_cg = difference_cg / dust_map
 
-    for m in (rel_legacy, rel_binned, rel_cg):
-        m[mask] = hp.UNSEEN
+    rel_legacy = np.sign(rel_legacy) * np.log10(np.abs(rel_legacy))
+    rel_binned = np.sign(rel_binned) * np.log10(np.abs(rel_binned))
+    rel_cg = np.sign(rel_cg) * np.log10(np.abs(rel_cg))
 
-    hp.mollview(rel_legacy, title="Legacy", min=-max, max=max, cbar=False,
+    for m in (rel_legacy, rel_binned, rel_cg):
+        m[mask | mask2] = hp.UNSEEN
+
+    hp.mollview(rel_legacy, title="Sign x Log10(Legacy)", min=-max, max=max, cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_legacy.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_legacy.png")
     plt.close()
 
-    hp.mollview(rel_binned, title="Binned", min=-max, max=max, cbar=True,
+    hp.mollview(rel_binned, title="Sign x Log10(Binned)", min=-max, max=max, cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_binned.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned.png")
     plt.close()
 
-    hp.mollview(rel_cg, title="CG", min=-max, max=max, cbar=False, coord=["E", "G"],
+    hp.mollview(rel_cg, title="Sign x Log10(CG)", min=-max, max=max, cbar=False, coord=["E", "G"],
                 cmap="RdBu_r")
     # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_cg.pdf")
@@ -158,32 +163,33 @@ if __name__ == "__main__":
     sgn_cg = np.sum(sgn_cg, axis=0)
 
     chi2_legacy = sgn_legacy * np.log10(sq_weight_legacy)
-    chi2_legacy[mask] = hp.UNSEEN
+    chi2_legacy[mask | mask2] = hp.UNSEEN
     chi2_binned = sgn_binned * np.log10(sq_weight_binned)
-    chi2_binned[mask] = hp.UNSEEN
+    chi2_binned[mask | mask2] = hp.UNSEEN
     chi2_cg = sgn_cg * np.log10(sq_weight_cg)
-    chi2_cg[mask] = hp.UNSEEN
+    chi2_cg[mask | mask2] = hp.UNSEEN
 
     if args.sim_type == "fossil":
         max_chi2 = 5
     elif args.sim_type == "firas":
-        max_chi2 = 150
+        max_chi2 = 1000
 
-    hp.mollview(chi2_legacy, title="Legacy", min=-max_chi2, max=max_chi2, cbar=False,
+    hp.mollview(chi2_legacy, title="Sign x Log10(Legacy)", min=-max_chi2, max=max_chi2,
+                cbar=False,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.png")
     plt.close()
 
-    hp.mollview(chi2_binned, title="Binned", min=-max_chi2, max=max_chi2, cbar=True,
+    hp.mollview(chi2_binned, title="Sign x Log10(Binned)", min=-max_chi2, max=max_chi2, cbar=False,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.png")
     plt.close() 
 
-    hp.mollview(chi2_cg, title="CG", min=-max_chi2, max=max_chi2, cbar=False, coord="E",
+    hp.mollview(chi2_cg, title="Sign x Log10(CG)", min=-max_chi2, max=max_chi2, cbar=False, coord="E",
                 cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.pdf")

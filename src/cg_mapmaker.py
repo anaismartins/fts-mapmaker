@@ -277,7 +277,7 @@ if __name__ == "__main__":
     t0 = _time()
 
     t0 = utils.log_step("load ifgs", t0, args.run_name)
-    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy", mmap_mode="r")
+    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy")
     t0 = utils.log_step("load pix", t0, args.run_name)
     ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
     ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
@@ -292,7 +292,7 @@ if __name__ == "__main__":
         np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy",
                 pix)
     else:
-        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy", mmap_mode="r")
+        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy")
 
     # print("Testing symmetry")
     # test_symmetry(pix)

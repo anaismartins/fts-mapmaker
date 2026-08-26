@@ -219,3 +219,4 @@ output/*.txt
 output/*/*.txt
 .vscode/
 *.pdf
+.claude/
