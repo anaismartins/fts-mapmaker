@@ -119,7 +119,7 @@ def A_dot_x(x, pointing, sigma, n_pix):
                                           minlength=n_pix)
 
     # add regularization term to Ax
-    Ax += 1e-2 * x
+    Ax += 1e-4 * x
 
     return Ax.ravel()
 
@@ -169,6 +169,14 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
 
         if delta_new < tol**2 * delta0:
             break
+
+        if iter % 10 == 0:
+            x = x.reshape((n_pix, ifg_size))
+            m = np.fft.rfft(x, axis=1).real
+            hp.mollview(m[:, g.SPEC_SIZE[args.sim_type]//2], title=f"CG map at iteration {iter}",
+                        unit="MJy/sr")
+            plt.savefig(f"../output/debug/{args.sim_type}_cg_map_iter{iter}.png")
+            
     return x
 
 def conjugate_gradient(b, pointing, sigma, x=None, maxiter=1000, tol=1e-5, npix=g.NPIX[args.sim_type]):

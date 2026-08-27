@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 
-run_name="firas_sim_v31"
+run_name="firas_sim_v32"
 mode="debug" # "release"
 
-owls=(owl{39..46}.uio.no)
-nworkers=(128 128 128 128 128 128 128 128)
+owl1=owl{36..37}.uio.no
+owl2=owl{39..46}.uio.no
+owls=(owl1 owl2)
+len=${#owls[@]}
 
+nworkers=(64 128)
 
-for i in "${!owls[@]}"; do
-  v="${owls[$i]}"
-  if [[ "$HOSTNAME" == *"${v%%.*}"* || "$HOSTNAME" == "$v" ]]; then
+for (( i=0; i<${len}; i++ )); do
+  c=${!owls[$i]}
+  v=$(eval "echo $c")
+  if [[ "$v" == *"$HOSTNAME"* ]]; then
     nworker="${nworkers[$i]}"
     break
   fi
@@ -26,7 +30,8 @@ if [ "$mode" = "release" ]; then
     python -m sims.firas
 else
     echo "Running in debug mode."
-    python -u -m sims.firas --run-name "$run_name" --plots "debug" --sim-type "firas" #--noise
+    python -u -m sims.firas --run-name "$run_name" --plots "debug" --sim-type "firas" --firas_ss 
+    #--noise
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."
