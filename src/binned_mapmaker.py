@@ -27,13 +27,24 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t00 = _time()
 t0 = _time()
 
+if args.sim_type == "fossil":
+    add_on = ""
+elif args.sim_type == "firas":
+    if args.firas_ss:
+        add_on = "_firas"
+    else:
+        add_on = "_fossil"
+    folder_add_on = f"/ss{add_on}"
+else:
+    raise ValueError(f"Unknown sim_type: {args.sim_type}")
+
 t0 = utils.log_step("load ifgs", t0, args.run_name)
-ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy", mmap_mode="r")
+ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy", mmap_mode="r")
 t0 = utils.log_step("load pix", t0, args.run_name)
-ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
-ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
+ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
+ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
 t0 = utils.log_step("load sigma", t0, args.run_name)
-sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
+sigma = np.load(f"../output/data/{args.sim_type}/noise_{add_on}.npy", mmap_mode="r")
 
 if args.sim_type == "firas":
     t0 = utils.log_step("divide ifgs by N_IFGS", t0, args.run_name)
@@ -85,12 +96,12 @@ m_ifg[mask] = np.nan
 
 for nui in range(g.IFG_SIZE[args.sim_type]):
     if g.FITS:
-        hp.write_map(f"../output/binned/{args.sim_type}/ifg_maps/{nui:04d}.fits",
+        hp.write_map(f"../output/binned/{args.sim_type}{folder_add_on}/ifg_maps/{nui:04d}.fits",
                      m_ifg[:, nui], overwrite=True, dtype=np.float64)
     if g.PNG:
         hp.mollview(m_ifg[:, nui], title=f"IFG {nui:04d}", unit="MJy/sr", min=0, max=50, xsize=2000,
                     coord=["E", "G"])
-        plt.savefig(f"../output/binned/{args.sim_type}/ifg_maps/{nui:04d}.png")
+        plt.savefig(f"../output/binned/{args.sim_type}{folder_add_on}/ifg_maps/{nui:04d}.png")
         plt.close()
 
 # Keep only the real spectral component to match the mapmaking convention.
@@ -102,7 +113,7 @@ elif args.sim_type == "firas":
     nfreq = 257
 frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
 
-path = f"../output/binned/{args.sim_type}/maps/"
+path = f"../output/binned/{args.sim_type}{folder_add_on}/maps/"
 for nui, freq in enumerate(frequencies):
     if g.FITS:
         hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)

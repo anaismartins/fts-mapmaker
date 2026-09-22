@@ -284,23 +284,34 @@ if __name__ == "__main__":
     t00 = _time()
     t0 = _time()
 
-    t0 = utils.log_step("load ifgs", t0, args.run_name)
-    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs.npy")
-    t0 = utils.log_step("load pix", t0, args.run_name)
-    ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon.npy", mmap_mode="r")
-    ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat.npy", mmap_mode="r")
-    t0 = utils.log_step("load sigma", t0, args.run_name)
-    sigma = np.load(f"../output/data/{args.sim_type}/noise.npy", mmap_mode="r")
+    if args.sim_type == "fossil":
+        add_on = ""
+    elif args.sim_type == "firas":
+        if args.firas_ss:
+            add_on = "_firas"
+        else:
+            add_on = "_fossil"
+        folder_add_on = f"/ss{add_on}"
+    else:
+        raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
-    if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy"):
+    t0 = utils.log_step("load ifgs", t0, args.run_name)
+    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy")
+    t0 = utils.log_step("load pix", t0, args.run_name)
+    ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
+    ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
+    t0 = utils.log_step("load sigma", t0, args.run_name)
+    sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
+
+    if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy"):
         t0 = utils.log_step("ang2pix", t0, args.run_name)
         pix = ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat)
         pix = np.swapaxes(pix, 0, 1)
         pix = np.ascontiguousarray(pix)
-        np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy",
+        np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
                 pix)
     else:
-        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}.npy")
+        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy")
 
     # print("Testing symmetry")
     # test_symmetry(pix)
@@ -314,7 +325,7 @@ if __name__ == "__main__":
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0 = np.zeros((n_pix, ifg_size), dtype=np.float64)
     for i in range(ifg_size):
-        x0[:, i] = hp.read_map(f"../output/binned/{args.sim_type}/ifg_maps/{i:04d}.fits")
+        x0[:, i] = hp.read_map(f"../output/binned/{args.sim_type}{folder_add_on}/ifg_maps/{i:04d}.fits")
 
     # NaNs mark pixels never hit by the scan, so the mask is per-pixel and
     # survives the rFFT along the ifg axis.
@@ -338,7 +349,7 @@ if __name__ == "__main__":
     frequencies = spectra.generate_frequencies(simtype=args.sim_type,
                                                nfreq=g.SPEC_SIZE[args.sim_type])
 
-    path = f"../output/cg/{args.sim_type}/"
+    path = f"../output/cg/{args.sim_type}{folder_add_on}/"
     for nui, freq in enumerate(frequencies):
         if g.FITS:
             hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
@@ -349,7 +360,7 @@ if __name__ == "__main__":
             plt.close()
 
     t0 = utils.log_step("save_maps", t0, args.run_name)
-    print(f"Saved maps to ../output/cg/{args.sim_type}/.")
+    print(f"Saved maps to ../output/cg/{args.sim_type}{folder_add_on}/.")
         
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")
