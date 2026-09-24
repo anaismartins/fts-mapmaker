@@ -11,6 +11,7 @@ import os
 import random
 import warnings
 from multiprocessing import Pool
+from pathlib import Path
 from time import time as _time
 
 import healpy as hp
@@ -25,7 +26,6 @@ import sims.noise as noise
 import sims.scanning_strategy as ss
 import utils
 from argparser import args
-from pathlib import Path
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -37,7 +37,7 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
     f.write(f"Number of workers used: {args.nworkers}\n")
     f.write("=" * 50 + "\n")
-    f.write(f"{'starting':<35} | ")
+    f.write(f"{'starting':<40} | ")
 
 t0 = _time()
 t00 = _time()
@@ -63,7 +63,11 @@ if args.plots == "debug":
 
     dust_map_dir = "../output/sims/fossil/dust_maps"
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
-    args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in range(len(frequencies))]
+
+    debug_nside = 128
+    debug_dust = hp.ud_grade(dust_map_Mjy, debug_nside)
+    args_list = [(frequencies[nui], debug_dust * sed[nui], dust_map_dir) for nui in
+                 range(len(frequencies))]
 
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
     with Pool(processes=args.nworkers) as pool:

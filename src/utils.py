@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
+from argparser import args
 
 
 def save_maps(freq, m, path, write_png=False, add_on=""):
@@ -14,11 +15,17 @@ def save_maps(freq, m, path, write_png=False, add_on=""):
     if g.PNG and write_png:
         hp.mollview(m, title=f"{freq_str} GHz", unit="MJy/sr", min=0, max=50, xsize=800,
                     coord=["E", "G"])
-        plt.savefig(f"{path}/{freq_str}_{add_on}.png")
+        plt.savefig(f"{path}/{freq_str}{add_on}.png")
         plt.close()
 
-def _save_one_map(args):
-    freq, dust_map_i, out_dir, add_on = args
+def _save_one_map(func_args):
+    if args.sim_type == "fossil":
+        freq, dust_map_i, out_dir = func_args
+        add_on=""
+    elif args.sim_type == "firas":
+        freq, dust_map_i, out_dir, add_on = func_args
+    else:
+        raise ValueError(f"Unknown sim_type: {args.sim_type}")
     # adjust if utils.save_maps signature is different
     save_maps(freq, dust_map_i, out_dir, write_png=True, add_on=add_on)
 

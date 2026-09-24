@@ -32,7 +32,7 @@ else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
         python -u -m sims.fossil --nworkers "$nworker" --run-name "$run_name" --plots "debug" \
-        --sim-type "fossil"
+        --sim-type "fossil" --noise
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."
