@@ -7,6 +7,7 @@ or in more simple terms we solve
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
@@ -350,14 +351,11 @@ if __name__ == "__main__":
                                                nfreq=g.SPEC_SIZE[args.sim_type])
 
     path = f"../output/cg/{args.sim_type}{folder_add_on}/"
-    for nui, freq in enumerate(frequencies):
-        if g.FITS:
-            hp.write_map(f"{path}{int(freq):04d}.fits", m[:, nui], overwrite=True, dtype=np.float64)
-        if g.PNG:
-            hp.mollview(m[:, nui], title=f"{int(freq):04d} GHz", unit="MJy/sr", min=0, max=50,
-                        coord=["E", "G"])
-            plt.savefig(f"{path}{int(freq):04d}.png")
-            plt.close()
+    args_list = [(freq, m[:, nui], path) for nui, freq in enumerate(frequencies)]
+
+    # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
+    with Pool(processes=args.nworkers) as pool:
+        list(pool.imap_unordered(utils.save_maps, args_list))
 
     t0 = utils.log_step("save_maps", t0, args.run_name)
     print(f"Saved maps to ../output/cg/{args.sim_type}{folder_add_on}/.")

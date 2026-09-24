@@ -2,10 +2,11 @@
 
 set -euo pipefail
 
-sim_type="firas"
+sim_type="fossil"
 mapmaker_type="legacy"
-version="v3"
+version="v1"
 mode="debug" #"release"
+add_on=""
 
 run_name="${mapmaker_type}_${sim_type}_${version}"
 
@@ -18,4 +19,4 @@ else
 fi
 cd "$path"
 echo "Creating GIF from PNG files..."
-convert *.png -delay 20 -loop 0 ${mapmaker_type}_${sim_type}_${add_on}.gif
+convert *.png -delay 20 -loop 0 ${mapmaker_type}_${sim_type}${add_on}.gif

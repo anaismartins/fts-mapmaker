@@ -1,4 +1,5 @@
 import os
+from multiprocessing import Pool
 from time import time as _time
 
 import healpy as hp
@@ -113,18 +114,14 @@ frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], sim
 # save m as maps
 t0 = utils.log_step("save_maps", t0, args.run_name)
 folder_add_on = f"/ss{add_on}" if args.sim_type == "firas" else ""
-for nui in range(len(frequencies)):
-    if g.FITS:
-        hp.write_map(f"../output/legacy/{args.sim_type}{folder_add_on}/{int(frequencies[nui]):04d}.fits",
-                     m[:, nui], overwrite=True, dtype=np.float64)
-    if g.PNG:
-        hp.mollview(m[:, nui], title=f"{int(frequencies[nui]):04d} GHz", unit="MJy/sr",
-            min=0, max=50, xsize=2000, coord=["E", "G"])
-        plt.savefig(f"../output/legacy/{args.sim_type}{folder_add_on}/{int(frequencies[nui]):04d}.png")
-        plt.close()
-        plt.clf()
+out_dir = f"../output/legacy/{args.sim_type}{folder_add_on}"
+args_list = [(frequencies[nui], m[:, nui], out_dir) for nui in range(len(frequencies))]
 
-print(f"Saved maps to ../output/legacy/{args.sim_type}{folder_add_on}.")
+# hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
+with Pool(processes=args.nworkers) as pool:
+    list(pool.imap_unordered(utils.save_maps, args_list))
+
+print(f"Saved maps to {out_dir}.")
     
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write(f"{(_time() - t0):0.2f}\n")
