@@ -238,39 +238,64 @@ def test_symmetry(pointing):
     print(f"Symmetry test: lhs={lhs}, rhs={rhs}, diff={lhs - rhs}")
 
 @nb.njit(parallel=True, fastmath=True)
-def compute_inv_variance_map_2d(pointing, sigma, n_pix, ifg_size, n_ifgs):
+def _compute_inv_variance_map_2d_scalar(pointing, invsigma2, n_pix, ifg_size):
     invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
-
-    invsigma2 = 1.0 / sigma**2
 
     for x_i in nb.prange(ifg_size):
         for data_point_i in range(pointing.shape[1]):
             pix = pointing[x_i, data_point_i]
-
-            if sigma.ndim == 0:
-                invv[pix, x_i] += invsigma2
-            else:
-                invv[pix, x_i] += invsigma2[data_point_i, x_i]
+            invv[pix, x_i] += invsigma2
 
     return invv
 
 @nb.njit(parallel=True, fastmath=True)
-def compute_inv_variance_map_3d(pointing, sigma, n_pix, ifg_size, n_ifgs):
+def _compute_inv_variance_map_2d_vector(pointing, invsigma2, n_pix, ifg_size):
     invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
 
-    invsigma2 = 1.0 / sigma**2
+    for x_i in nb.prange(ifg_size):
+        for data_point_i in range(pointing.shape[1]):
+            pix = pointing[x_i, data_point_i]
+            invv[pix, x_i] += invsigma2[data_point_i, x_i]
+
+    return invv
+
+def compute_inv_variance_map_2d(pointing, sigma, n_pix, ifg_size, n_ifgs):
+    sigma_arr = np.asarray(sigma)
+    invsigma2 = 1.0 / sigma_arr**2
+    if sigma_arr.ndim == 0:
+        return _compute_inv_variance_map_2d_scalar(pointing, float(invsigma2), n_pix, ifg_size)
+    return _compute_inv_variance_map_2d_vector(pointing, invsigma2, n_pix, ifg_size)
+
+@nb.njit(parallel=True, fastmath=True)
+def _compute_inv_variance_map_3d_scalar(pointing, invsigma2, n_pix, ifg_size, n_ifgs):
+    invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
 
     for ifg_i in range(n_ifgs):
         for x_i in nb.prange(ifg_size):
             for data_point_i in range(pointing.shape[1]):
                 pix = pointing[x_i, data_point_i, ifg_i]
-
-                if sigma.ndim == 0:
-                    invv[pix, x_i] += invsigma2
-                else:
-                    invv[pix, x_i] += invsigma2[data_point_i, x_i, ifg_i]
+                invv[pix, x_i] += invsigma2
 
     return invv
+
+@nb.njit(parallel=True, fastmath=True)
+def _compute_inv_variance_map_3d_vector(pointing, invsigma2, n_pix, ifg_size, n_ifgs):
+    invv = np.zeros((n_pix, ifg_size), dtype=np.float64)
+
+    for ifg_i in range(n_ifgs):
+        for x_i in nb.prange(ifg_size):
+            for data_point_i in range(pointing.shape[1]):
+                pix = pointing[x_i, data_point_i, ifg_i]
+                invv[pix, x_i] += invsigma2[data_point_i, x_i, ifg_i]
+
+    return invv
+
+def compute_inv_variance_map_3d(pointing, sigma, n_pix, ifg_size, n_ifgs):
+    sigma_arr = np.asarray(sigma)
+    invsigma2 = 1.0 / sigma_arr**2
+    if sigma_arr.ndim == 0:
+        return _compute_inv_variance_map_3d_scalar(pointing, float(invsigma2), n_pix, ifg_size, n_ifgs)
+    return _compute_inv_variance_map_3d_vector(pointing, invsigma2, n_pix, ifg_size, n_ifgs)
 
 
 if __name__ == "__main__":
@@ -287,6 +312,7 @@ if __name__ == "__main__":
 
     if args.sim_type == "fossil":
         add_on = ""
+        folder_add_on = ""
     elif args.sim_type == "firas":
         if args.firas_ss:
             add_on = "_firas"
@@ -301,8 +327,11 @@ if __name__ == "__main__":
     t0 = utils.log_step("load pix", t0, args.run_name)
     ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
     ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
-    t0 = utils.log_step("load sigma", t0, args.run_name)
-    sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
+    if args.noise:
+        t0 = utils.log_step("load sigma", t0, args.run_name)
+        sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
+    else:
+        sigma = 1.0
 
     if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy"):
         t0 = utils.log_step("ang2pix", t0, args.run_name)
@@ -355,7 +384,7 @@ if __name__ == "__main__":
 
     # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
     with Pool(processes=args.nworkers) as pool:
-        list(pool.imap_unordered(utils.save_maps, args_list))
+        pool.starmap(utils.save_maps, args_list)
 
     t0 = utils.log_step("save_maps", t0, args.run_name)
     print(f"Saved maps to ../output/cg/{args.sim_type}{folder_add_on}/.")

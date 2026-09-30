@@ -92,8 +92,6 @@ else:
     pix_grid = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
                         mmap_mode="r")
 
-print(f"DEBUG: pix_grid shape: {pix_grid.shape}")
-
 t0 = utils.log_step("compute numerator and denominator", t0, args.run_name)
 if args.sim_type == "fossil":
     numerator, denominator = accumulate_fossil(ifgs, pix_grid, w_noise, g.NPIX[args.sim_type])
@@ -115,8 +113,9 @@ else:
 t0 = utils.log_step("create_mask", t0, args.run_name)
 mask = denominator == 0
 
-t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+t0 = utils.log_step("initialize m_ifg", t0, args.run_name)
 m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
+t0 = utils.log_step("compute m_ifg", t0, args.run_name)
 m_ifg[~mask] = numerator[~mask] / denominator[~mask]
 m_ifg[mask] = np.nan
 
