@@ -2,6 +2,7 @@
 Script to compare the dust simulation with the original FIRAS maps.
 """
 
+import csv
 import multiprocessing
 from functools import partial
 from time import time as _time
@@ -55,6 +56,82 @@ def sum_chi2(nu_i):
     return (sq_weight_legacy, sq_weight_binned, sq_weight_cg, sgn_legacy,
             sgn_binned, sgn_cg)
 
+
+def compute_residual_metrics(frequencies, hit_map):
+    observed = np.isfinite(hit_map) & (hit_map > 0) & (hit_map != hp.UNSEEN)
+    methods = ("legacy", "binned", "cg")
+    rows = []
+
+    for frequency in frequencies:
+        freq = int(frequency)
+        truth = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{freq:04d}.fits")
+        truth = hp.ud_grade(truth, nside_out=g.NSIDE[args.sim_type])
+        maps = {"legacy": hp.read_map(f"../output/legacy/{args.sim_type}/{freq:04d}.fits"), "binned": hp.read_map(f"../output/binned/{args.sim_type}/maps/{freq:04d}.fits"), "cg": (np.zeros_like(truth) if args.cg_dummy else hp.read_map(f"../output/cg/{args.sim_type}/{freq:04d}.fits"))}
+
+        common = observed.copy()
+        for data in (truth, *maps.values()):
+            common &= np.isfinite(data) & (data != hp.UNSEEN)
+        n_common = int(np.count_nonzero(common))
+        if n_common == 0:
+            raise ValueError(f"No common observed pixels for {freq} GHz")
+
+        row = {"frequency_GHz": freq, "n_common_pixels": n_common}
+        for method in methods:
+            residual = maps[method][common] - truth[common]
+            row[f"{method}_bias"] = float(np.mean(residual))
+            row[f"{method}_rms"] = float(np.sqrt(np.mean(residual**2)))
+            row[f"{method}_centered_rms"] = float(np.std(residual))
+        rows.append(row)
+
+    output_path = f"../output/compare/{args.sim_type}_residual_metrics.csv"
+    fieldnames = ["frequency_GHz", "n_common_pixels"] + [f"{method}_{metric}" for method in methods for metric in ("bias", "rms", "centered_rms")]
+    with open(output_path, "w", newline="") as output:
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"Saved per-frequency residual metrics to {output_path}.")
+    print(f"Common observed pixels per frequency: {min(row['n_common_pixels'] for row in rows)}-{max(row['n_common_pixels'] for row in rows)}.")
+    for method in methods:
+        biases = np.array([row[f"{method}_bias"] for row in rows])
+        rms_values = np.array([row[f"{method}_rms"] for row in rows])
+        print(f"{method}: median |bias|={np.median(np.abs(biases)):.6g}, median per-frequency RMS={np.median(rms_values):.6g}, equal-frequency pooled RMS={np.sqrt(np.mean(rms_values**2)):.6g} MJy/sr")
+
+    for method in methods[1:]:
+        lower_count = sum(row[f"{method}_rms"] < row["legacy_rms"] for row in rows)
+        print(f"{method} has lower RMS than legacy in {lower_count}/{len(rows)} frequencies.")
+    plot_residual_metrics(rows)
+    return rows
+
+def plot_residual_metrics(rows):
+    plt.figure(figsize=(10, 6))
+    plt.plot([row["frequency_GHz"] for row in rows], [row["legacy_centered_rms"] for row in rows],
+             label="Legacy")
+    plt.plot([row["frequency_GHz"] for row in rows], [row["binned_centered_rms"] for row in rows],
+             label="Binned")
+    plt.plot([row["frequency_GHz"] for row in rows], [row["cg_centered_rms"] for row in rows],
+             label="CG", linestyle="--")
+    plt.xlabel("Frequency (GHz)")
+    plt.ylabel("Centered RMS (MJy/sr)")
+    plt.title("Per-frequency centered RMS of residuals vs. dust simulation")
+    plt.legend()
+    plt.savefig(f"../output/compare/{args.sim_type}_residual_rms.png")
+    plt.close()
+
+    plt.figure(figsize=(10, 6))
+    plt.plot([row["frequency_GHz"] for row in rows], [np.abs(row["legacy_bias"]) for row in rows],
+             label="Legacy")
+    plt.plot([row["frequency_GHz"] for row in rows], [np.abs(row["binned_bias"]) for row in rows],
+             label="Binned")
+    plt.plot([row["frequency_GHz"] for row in rows], [np.abs(row["cg_bias"]) for row in rows],
+             label="CG")
+    plt.xlabel("Frequency (GHz)")
+    plt.ylabel(r"|Bias| (MJy/sr)")
+    plt.title(r"Per-frequency |bias| of residuals vs. dust simulation")
+    plt.legend()
+    plt.savefig(f"../output/compare/{args.sim_type}_residual_bias.png")
+    plt.close()
+
 if __name__ == "__main__":
 
     with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
@@ -67,10 +144,10 @@ if __name__ == "__main__":
 
     if args.sim_type == "fossil":
         ref_freq = 540
-        max = 0.01
+        plot_limit = 5
     elif args.sim_type == "firas":
         ref_freq = 544
-        max = 2
+        plot_limit = 2
     else:
         raise ValueError("args.sim_type must be 'fossil' or 'firas'")
 
@@ -89,6 +166,7 @@ if __name__ == "__main__":
         overlay_contour(galaxy_mask, coord=["E", "G"], colors="red", linewidths=1.5)
         plt.savefig(f"../output/debug/{args.sim_type}_galaxy_contour.png")
         plt.close()
+        print(f"Saved galaxy contour to ../output/debug/{args.sim_type}_galaxy_contour.png.")
 
     legacy_map = hp.read_map(f"../output/legacy/{args.sim_type}/{ref_freq:04d}.fits")
     binned_map = hp.read_map(f"../output/binned/{args.sim_type}/maps/{ref_freq:04d}.fits")
@@ -117,32 +195,37 @@ if __name__ == "__main__":
     for m in (rel_legacy, rel_binned, rel_cg):
         m[mask | mask2] = hp.UNSEEN
 
-    hp.mollview(rel_legacy, title="Sign x Log10(Legacy)", min=-max, max=max, cbar=False,
+    hp.mollview(rel_legacy, title="Sign x Log10(Legacy)", min=-plot_limit, max=plot_limit, #cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
-    # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_legacy.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_legacy.png")
     plt.close()
+    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_legacy.pdf and "
+          f"../output/compare/{args.sim_type}_legacy.png.")
 
-    hp.mollview(rel_binned, title="Sign x Log10(Binned)", min=-max, max=max, cbar=False,
+    hp.mollview(rel_binned, title="Sign x Log10(Binned)", min=-plot_limit, max=plot_limit, #cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
-    # plt.tight_layout()
     plt.savefig(f"../output/compare/{args.sim_type}_binned.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned.png")
     plt.close()
+    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_binned.pdf and "
+          f"../output/compare/{args.sim_type}_binned.png.")
 
-    hp.mollview(rel_cg, title="Sign x Log10(CG)", min=-max, max=max, cbar=False, coord=["E", "G"],
-                cmap="RdBu_r")
-    # plt.tight_layout()
+    hp.mollview(rel_cg, title="Sign x Log10(CG)", min=-plot_limit, max=plot_limit, #cbar=False,
+                coord=["E", "G"], cmap="RdBu_r")
     plt.savefig(f"../output/compare/{args.sim_type}_cg.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_cg.png")
     plt.close()
+    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_cg.pdf and "
+          f"../output/compare/{args.sim_type}_cg.png.")
 
     # calculate the chi2 -- we want to sum over frequencies so we need to load all the maps
     t0 = utils.log_step("generate frequencies", t0, args.run_name)
-    frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=g.SPEC_SIZE[args.sim_type])
-    print(f"Generated {len(frequencies)} frequencies from {int(frequencies[0])} to "
-          f"{int(frequencies[-1])} GHz.")
+    frequencies = spectra.generate_frequencies(simtype=args.sim_type,
+                                               nfreq=g.SPEC_SIZE[args.sim_type])
+
+    t0 = utils.log_step("compute residual metrics", t0, args.run_name)
+    compute_residual_metrics(frequencies, hit_map)
 
     # Source - https://stackoverflow.com/a/9786225
     # Posted by Sven Marnach, modified by community. See post 'Timeline' for change history
@@ -181,13 +264,17 @@ if __name__ == "__main__":
     plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.png")
     plt.close()
+    print(f"Saved legacy chi2 plots to ../output/compare/{args.sim_type}_legacy_chi2.pdf and "
+              f"../output/compare/{args.sim_type}_legacy_chi2.png.")
 
     hp.mollview(chi2_binned, title="Sign x Log10(Binned)", min=-max_chi2, max=max_chi2, cbar=False,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.png")
-    plt.close() 
+    plt.close()
+    print(f"Saved binned chi2 plots to ../output/compare/{args.sim_type}_binned_chi2.pdf and "
+              f"../output/compare/{args.sim_type}_binned_chi2.png.")
 
     hp.mollview(chi2_cg, title="Sign x Log10(CG)", min=-max_chi2, max=max_chi2, cbar=False, coord="E",
                 cmap="RdBu_r")
@@ -195,6 +282,8 @@ if __name__ == "__main__":
     plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.pdf")
     plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.png")
     plt.close()
+    print(f"Saved cg chi2 plots to ../output/compare/{args.sim_type}_cg_chi2.pdf and "
+              f"../output/compare/{args.sim_type}_cg_chi2.png.")
 
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")

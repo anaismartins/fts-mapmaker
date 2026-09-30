@@ -6,7 +6,6 @@ or in more simple terms we solve
 """
 
 import os
-from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pool
 from time import time as _time
 
@@ -20,18 +19,6 @@ import globals as g
 import spectra
 import utils
 from argparser import args
-
-
-def ang2pix_threaded(nside, lon, lat, nworkers=6):
-    out = np.empty(lon.shape, dtype=np.int32)
-    bounds = np.linspace(0, lon.shape[0], nworkers + 1).astype(int)
-    def work(k):
-        s, e = bounds[k], bounds[k+1]
-        out[s:e] = hp.ang2pix(nside, lon[s:e], lat[s:e], lonlat=True)
-    with ThreadPoolExecutor(nworkers) as ex:
-        list(ex.map(work, range(nworkers)))
-    return out
-
 
 
 @nb.njit(parallel=True, fastmath=True)
@@ -120,7 +107,7 @@ def A_dot_x(x, pointing, sigma, n_pix):
                                           minlength=n_pix)
 
     # add regularization term to Ax
-    Ax += 1e-4 * x
+    # Ax += 1e-4 * x
 
     return Ax.ravel()
 
@@ -328,24 +315,22 @@ if __name__ == "__main__":
     ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
     t0 = utils.log_step("load ecl_lat", t0, args.run_name)
     ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
+    t0 = utils.log_step("get_noise", t0, args.run_name)
     if args.noise:
-        t0 = utils.log_step("load sigma", t0, args.run_name)
         sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
     else:
         sigma = 1.0
 
     if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy"):
         t0 = utils.log_step("ang2pix", t0, args.run_name)
-        pix = ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat)
+        pix = utils.ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, nworkers=args.nworkers)
         pix = np.swapaxes(pix, 0, 1)
         pix = np.ascontiguousarray(pix)
         np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
                 pix)
     else:
+        t0 = utils.log_step("load pix", t0, args.run_name)
         pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy")
-
-    # print("Testing symmetry")
-    # test_symmetry(pix)
 
     t0 = utils.log_step("calculate n_ifgs", t0, args.run_name)
     n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1

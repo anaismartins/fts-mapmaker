@@ -117,6 +117,7 @@ t0 = utils.log_step("initialize m_ifg", t0, args.run_name)
 m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
 t0 = utils.log_step("compute m_ifg", t0, args.run_name)
 m_ifg[~mask] = numerator[~mask] / denominator[~mask]
+t0 = utils.log_step("set empty to nan", t0, args.run_name)
 m_ifg[mask] = np.nan
 
 for nui in range(g.IFG_SIZE[args.sim_type]):

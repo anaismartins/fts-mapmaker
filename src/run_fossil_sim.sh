@@ -3,12 +3,13 @@
 run_name="fossil_sim_v39"
 mode="debug" #"release"
 
-owl1=owl{36..37}.uio.no
-owl2=owl{39..46}.uio.no
-owls=(owl1 owl2)
+owl1=owl{31..35}.uio.no
+owl2=owl{36..37}.uio.no
+owl3=owl{39..46}.uio.no
+owls=(owl1 owl2 owl3)
 len=${#owls[@]}
 
-nworkers=(64 128)
+nworkers=(32 64 128)
 
 for (( i=0; i<${len}; i++ )); do
   c=${!owls[$i]}
@@ -27,7 +28,7 @@ export OPENBLAS_NUM_THREADS="$nworker"
 # Run the program; its output goes directly to the terminal
 if [ "$mode" = "release" ]; then
     echo "Running in release mode with $nworker workers..."
-    python -m sims.fossil --nworkers "$nworker" --plots "paper_only"
+    python -m sims.fossil --nworkers "$nworker" --plots "paper_only" --noise
 else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \

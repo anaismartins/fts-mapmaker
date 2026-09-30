@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-sim_type="firas"
-version="v0"
+sim_type="fossil"
+version="v2"
 mode="release"
 
 run_name="comparison_${sim_type}_${version}"

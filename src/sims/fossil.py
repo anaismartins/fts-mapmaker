@@ -59,8 +59,6 @@ t0 = utils.log_step("irfft", t0, args.run_name)
 sed_ifg = fft.irfft(sed)
 
 if args.plots == "debug":
-    dust = np.multiply.outer(dust_map_Mjy, sed)
-
     dust_map_dir = "../output/sims/fossil/dust_maps"
     t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
 
@@ -71,7 +69,7 @@ if args.plots == "debug":
 
     t0 = utils.log_step("save_dust_maps", t0, args.run_name)
     with Pool(processes=args.nworkers) as pool:
-        list(pool.imap_unordered(utils._save_one_map, args_list))
+        list(pool.starmap(utils.save_maps, args_list))
     print(f"Saved dust maps to {dust_map_dir}.")
 
 # now we frankenstein the IFGs together
@@ -83,9 +81,16 @@ n_cols = sed_ifg.shape[0]
 t0 = utils.log_step("get nside", t0, args.run_name)
 nside_dust = hp.get_nside(dust_map_Mjy)
 t0 = utils.log_step("ang2pix dust", t0, args.run_name)
-pix_ecl = hp.ang2pix(nside_dust, ecl_lon, ecl_lat, lonlat=True)
+pix_ecl = utils.ang2pix_cached(nside_dust, ecl_lon, ecl_lat,
+                               f"{data_dir}/pix_nside{nside_dust}.npy", nworkers=args.nworkers)
 t0 = utils.log_step("ang2pix fossil", t0, args.run_name)
-pix_ecl_fossil = hp.ang2pix(g.NSIDE["fossil"], ecl_lon, ecl_lat, lonlat=True)
+if nside_dust == g.NSIDE["fossil"]:
+    # dust map and fossil output share the same NSIDE, so the pixel indices are identical
+    pix_ecl_fossil = pix_ecl
+else:
+    pix_ecl_fossil = utils.ang2pix_cached(g.NSIDE["fossil"], ecl_lon, ecl_lat,
+                                          f"{data_dir}/pix_nside{g.NSIDE['fossil']}.npy",
+                                          nworkers=args.nworkers)
 
 # plot hit map
 if args.plots == "debug" or args.plots == "paper_only":

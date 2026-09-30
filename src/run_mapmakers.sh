@@ -4,7 +4,7 @@ set -euo pipefail
 
 sim_type="fossil"
 mapmaker_type="cg"
-version="v20"
+version="v21"
 mode="debug" #"release"
 add_on=""
 

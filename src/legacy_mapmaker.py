@@ -119,7 +119,7 @@ args_list = [(frequencies[nui], m[:, nui], out_dir) for nui in range(len(frequen
 
 # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
 with Pool(processes=args.nworkers) as pool:
-    list(pool.imap_unordered(utils.save_maps, args_list))
+    list(pool.starmap(utils.save_maps, args_list))
 
 print(f"Saved maps to {out_dir}.")
     

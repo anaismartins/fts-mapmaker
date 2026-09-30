@@ -220,3 +220,4 @@ output/*/*.txt
 .vscode/
 *.pdf
 .claude/
+*.csv
