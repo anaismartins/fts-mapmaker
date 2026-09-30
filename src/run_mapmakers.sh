@@ -3,8 +3,8 @@
 set -euo pipefail
 
 sim_type="fossil"
-mapmaker_type="legacy"
-version="v1"
+mapmaker_type="binned"
+version="v17"
 mode="debug" #"release"
 add_on=""
 

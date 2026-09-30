@@ -5,6 +5,7 @@ assuming there is only white noise i.e. N is diagonal, which means the equation 
     m = sum (d / sigma ^2) / sum (1 / sigma^2).
 """
 
+import os
 from time import time as _time
 
 import healpy as hp
@@ -12,12 +13,29 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numba as nb
 import numpy as np
 
 import globals as g
 import spectra
 import utils
 from argparser import args
+
+
+@nb.njit(parallel=True)
+def accumulate_fossil(ifgs, pix_grid, weight, n_pix):
+    n_channels = ifgs.shape[1]
+    numerator = np.zeros((n_pix, n_channels), dtype=np.float64)
+    denominator = np.zeros((n_pix, n_channels), dtype=np.float64)
+
+    for x_i in nb.prange(n_channels):
+        for row in range(ifgs.shape[0]):
+            pix = pix_grid[row, x_i]
+            numerator[pix, x_i] += ifgs[row, x_i] * weight
+            denominator[pix, x_i] += 1.0
+
+    return numerator, denominator
+
 
 with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
     f.write("Profiling output for white noise mapmaker for FOSSIL\n")
@@ -29,6 +47,7 @@ t0 = _time()
 
 if args.sim_type == "fossil":
     add_on = ""
+    folder_add_on = ""
 elif args.sim_type == "firas":
     if args.firas_ss:
         add_on = "_firas"
@@ -43,8 +62,14 @@ ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy", mmap_mode="r"
 t0 = utils.log_step("load pix", t0, args.run_name)
 ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
 ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
-t0 = utils.log_step("load sigma", t0, args.run_name)
-sigma = np.load(f"../output/data/{args.sim_type}/noise_{add_on}.npy", mmap_mode="r")
+if args.noise:
+    t0 = utils.log_step("load sigma", t0, args.run_name)
+    sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
+
+    t0 = utils.log_step("compute w_noise", t0, args.run_name)
+    w_noise = 1.0 / sigma**2
+else:
+    w_noise = 1
 
 if args.sim_type == "firas":
     t0 = utils.log_step("divide ifgs by N_IFGS", t0, args.run_name)
@@ -58,38 +83,39 @@ denominator = np.zeros_like(numerator, dtype=float)
 # than the number of IFGs) and use np.bincount to accumulate values per pixel.
 # This avoids the expensive Python-level loop over all IFGs and is much faster.
 t0 = utils.log_step("ang2pix", t0, args.run_name)
-pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)  
 
-t0 = utils.log_step("compute w_noise", t0, args.run_name)
-w_noise = 1.0 / sigma**2
+if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy"):
+    pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)  
+    np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
+            pix_grid)
+else:
+    pix_grid = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
+                        mmap_mode="r")
+
+print(f"DEBUG: pix_grid shape: {pix_grid.shape}")
 
 t0 = utils.log_step("compute numerator and denominator", t0, args.run_name)
 if args.sim_type == "fossil":
+    numerator, denominator = accumulate_fossil(ifgs, pix_grid, w_noise, g.NPIX[args.sim_type])
+    denominator *= w_noise
+
+elif args.sim_type == "firas":
     for x_i in range(g.IFG_SIZE[args.sim_type]):
         vals = ifgs[:, x_i] * w_noise
-        
-        pix  = pix_grid[:, x_i]
-        # bincount returns length npix; fill the column x_i for numerator/denominator
-        numerator[:, x_i] = np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
-        denominator[:, x_i] = np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
-                                          minlength=g.NPIX[args.sim_type])
-elif args.sim_type == "firas":
-    for ifg_i in range(g.N_IFGS):
-        for x_i in range(g.IFG_SIZE[args.sim_type]):
-            vals = ifgs[:, x_i] * w_noise
-
+        for ifg_i in range(g.N_IFGS):
             pix = pix_grid[:, x_i, ifg_i]
             
             # bincount returns length npix; fill the column x_i for numerator/denominator
             numerator[:, x_i] += np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
-            denominator[:, x_i] += np.bincount(pix, weights=np.ones_like(vals) * 1.0/(sigma**2),
-                                               minlength=g.NPIX[args.sim_type])
+            hits = np.bincount(pix, minlength=g.NPIX[args.sim_type])
+            denominator[:, x_i] += hits * w_noise
 else:
     raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
-t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+t0 = utils.log_step("create_mask", t0, args.run_name)
 mask = denominator == 0
 
+t0 = utils.log_step("compute m_ifg", t0, args.run_name)
 m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
 m_ifg[~mask] = numerator[~mask] / denominator[~mask]
 m_ifg[mask] = np.nan
