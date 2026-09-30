@@ -324,8 +324,9 @@ if __name__ == "__main__":
 
     t0 = utils.log_step("load ifgs", t0, args.run_name)
     ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy")
-    t0 = utils.log_step("load pix", t0, args.run_name)
+    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
     ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
+    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
     ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
     if args.noise:
         t0 = utils.log_step("load sigma", t0, args.run_name)
