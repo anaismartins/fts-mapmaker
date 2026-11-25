@@ -108,7 +108,8 @@ frequencies = spectra.generate_frequencies(nfreq=cfg.spec_size, simtype=cfg.sim_
 # save m as maps
 t0 = utils.log_step("save_maps", t0, cfg.log)
 out_dir = paths.mapmaker_dir("legacy")
-args_list = [(frequencies[nui], m[:, nui], out_dir) for nui in range(len(frequencies))]
+args_list = [(frequencies[nui], m[:, nui], out_dir, cfg.plots == "debug")
+             for nui in range(len(frequencies))]
 
 # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
 with Pool(processes=cfg.nworkers) as pool:

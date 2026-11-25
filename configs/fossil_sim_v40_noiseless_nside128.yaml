@@ -1,7 +1,7 @@
 # Noiseless FOSSIL simulation, sky model and output maps at nside 128.
 # Parameters not listed here take the defaults in src/config.py.
 sim_type: fossil
+dust_nside: 128 # nside of the sim maps
 nside: 128
-dust_nside: 128
 noise: false
 pointing: default

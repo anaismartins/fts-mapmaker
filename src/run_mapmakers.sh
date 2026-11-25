@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# usage: ./run_mapmakers.sh <sim_name> [binned|cg|legacy]
+# usage: ./run_mapmakers.sh <sim_name> [legacy|binned|cg]
 # Outputs go to ../output/<mapmaker>/<sim_type>/<sim_name>/.
 
 set -euo pipefail
 
-sim_name="${1:?usage: ./run_mapmakers.sh <sim_name> [binned|cg|legacy]}"
+sim_name="${1:?usage: ./run_mapmakers.sh <sim_name> [legacy|binned|cg]}"
 mapmaker_type="${2:-cg}"
 
 MPLBACKEND=Agg NUMBA_NUM_THREADS=8 python ${mapmaker_type}_mapmaker.py "$sim_name" --plots "debug"

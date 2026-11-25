@@ -354,7 +354,8 @@ if __name__ == "__main__":
                                                nfreq=cfg.spec_size)
 
     path = paths.mapmaker_dir("cg")
-    args_list = [(freq, m[:, nui], path) for nui, freq in enumerate(frequencies)]
+    args_list = [(freq, m[:, nui], path, cfg.plots == "debug")
+                 for nui, freq in enumerate(frequencies)]
 
     # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
     with Pool(processes=cfg.nworkers) as pool:

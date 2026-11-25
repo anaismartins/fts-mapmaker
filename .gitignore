@@ -222,3 +222,6 @@ output/*/*.txt
 .claude/
 *.csv
 AGENTS.md
+*.txt
+*.yaml
+*.patch
