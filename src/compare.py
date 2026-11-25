@@ -132,6 +132,58 @@ def plot_residual_metrics(rows):
     plt.savefig(f"../output/compare/{args.sim_type}_residual_bias.png")
     plt.close()
 
+def compare_ifg_maps(frequencies):
+    sim_maps = []
+    binned_ifg_maps = []
+    for freq_i, freq in enumerate(frequencies.astype(int)):
+        sim_map = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{freq:04d}.fits")
+        sim_map = hp.ud_grade(sim_map, nside_out=g.NSIDE[args.sim_type])
+        sim_maps.append(sim_map)
+
+        if freq_i < len(frequencies) - 1:
+            for ifg_i in (freq_i * 2, freq_i * 2 + 1):
+                binned_ifg_map = hp.read_map(f"../output/binned/{args.sim_type}/ifg_maps/"
+                                             f"{ifg_i:04d}.fits")
+                binned_ifg_maps.append(binned_ifg_map)
+
+    print(f"Loaded sim and binned ifg maps for {args.sim_type}.")
+
+    sim_maps = np.array(sim_maps)
+    binned_ifg_maps = np.array(binned_ifg_maps)
+
+    # now we Fourier transform the sim maps into ifg maps
+    print("Computing Fourier transforms of sim maps into ifg maps...")
+    sim_ifg_maps = np.fft.irfft(sim_maps, axis=0)
+
+    # compare the sim and binned ifg maps
+    print("Comparing sim and binned ifg maps...")
+    for ifg_i in range(g.IFG_SIZE[args.sim_type]):
+        sim_ifg_map = sim_ifg_maps[ifg_i]
+        binned_ifg_map = binned_ifg_maps[ifg_i]
+
+        # plot each of these to see how they look
+        hp.mollview(sim_ifg_map, title=f"Simulated IFG {ifg_i:04d}", min=-5, max=5,
+                    coord=["E", "G"], cmap="RdBu_r")
+        plt.savefig(f"../output/compare/{args.sim_type}_ifg_sim/{ifg_i:04d}.png")
+        plt.close()
+        
+        hp.mollview(binned_ifg_map, title=f"Binned IFG {ifg_i:04d}", min=-5, max=5,
+                    coord=["E", "G"], cmap="RdBu_r")
+        plt.savefig(f"../output/compare/{args.sim_type}_ifg_binned/{ifg_i:04d}.png")
+        plt.close()
+
+        difference = binned_ifg_map - sim_ifg_map
+        rel_difference = np.sign(difference) * np.log10(np.abs(difference))
+
+        hp.mollview(rel_difference, title=f"Sign x Log10(Binned - Sim) IFG {ifg_i:04d}",
+                    min=-5, max=5, coord=["E", "G"], cmap="RdBu_r")
+        plt.savefig(f"../output/compare/{args.sim_type}_ifg_rel_diff/{ifg_i:04d}.png")
+        plt.close()
+
+    print(f"Saved sim ifg maps for all IFGs to ../output/compare/{args.sim_type}_ifg_sim/.")
+    print(f"Saved binned ifg map for all IFGs to ../output/compare/{args.sim_type}_ifg_binned/.")
+    print(f"Saved comparison plot for all IFGs to ../output/compare/{args.sim_type}_ifg_rel_diff/.")
+
 if __name__ == "__main__":
 
     with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
@@ -219,11 +271,16 @@ if __name__ == "__main__":
     print(f"Saved comparison plots to ../output/compare/{args.sim_type}_cg.pdf and "
           f"../output/compare/{args.sim_type}_cg.png.")
 
-    # calculate the chi2 -- we want to sum over frequencies so we need to load all the maps
+    # COMPARE THE IFG MAPS INSTEAD
+    # load all of the sim maps
     t0 = utils.log_step("generate frequencies", t0, args.run_name)
     frequencies = spectra.generate_frequencies(simtype=args.sim_type,
-                                               nfreq=g.SPEC_SIZE[args.sim_type])
+                                                   nfreq=g.SPEC_SIZE[args.sim_type])
 
+    compare_ifg_maps(frequencies)
+    quit()
+
+    # calculate the chi2 -- we want to sum over frequencies so we need to load all the maps
     t0 = utils.log_step("compute residual metrics", t0, args.run_name)
     compute_residual_metrics(frequencies, hit_map)
 
