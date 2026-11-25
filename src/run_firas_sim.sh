@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-run_name="firas_sim_v32"
+# usage: ./run_firas_sim.sh <sim_name>   (parameters are in ../configs/<sim_name>.yaml)
+sim_name="${1:?usage: ./run_firas_sim.sh <sim_name>}"
 mode="debug" # "release"
 
 owl1=owl{36..37}.uio.no
@@ -27,11 +28,11 @@ export OPENBLAS_NUM_THREADS="$nworker"
 # Run the program; its output goes directly to the terminal
 if [ "$mode" = "release" ]; then
     echo "Running in release mode."
-    python -m sims.firas
+    python -m sims.firas "$sim_name" --nworkers "$nworker"
 else
     echo "Running in debug mode."
-    python -u -m sims.firas --run-name "$run_name" --plots "debug" --sim-type "firas" --firas_ss 
-    #--noise
+    /usr/bin/time -v -o ../output/time_stats.txt \
+        python -u -m sims.firas "$sim_name" --nworkers "$nworker" --plots "debug"
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."

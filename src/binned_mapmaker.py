@@ -19,7 +19,8 @@ import globals as g
 import paths
 import spectra
 import utils
-from argparser import args
+import config
+from config import cfg
 
 
 @nb.njit(parallel=True)
@@ -37,7 +38,7 @@ def accumulate_fossil(ifgs, pix_grid, weight, n_pix):
     return numerator, denominator
 
 
-with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+with open(cfg.log, "w") as f:
     f.write("Profiling output for white noise mapmaker for FOSSIL\n")
     f.write("=" * 50 + "\n")
     f.write(f"{'starting':<40} | ")
@@ -45,73 +46,68 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t00 = _time()
 t0 = _time()
 
-if args.sim_type not in ("fossil", "firas"):
-    raise ValueError(f"Unknown sim_type: {args.sim_type}")
+config.save_record(paths.mapmaker_dir("binned"))
 
-t0 = utils.log_step("load ifgs", t0, args.run_name)
+t0 = utils.log_step("load ifgs", t0, cfg.log)
 ifgs = np.load(paths.data_file("ifgs"), mmap_mode="r")
-t0 = utils.log_step("load pix", t0, args.run_name)
-ecl_lon = np.load(paths.data_file("ecl_lon"), mmap_mode="r")
-ecl_lat = np.load(paths.data_file("ecl_lat"), mmap_mode="r")
-if args.noise:
-    t0 = utils.log_step("load sigma", t0, args.run_name)
+t0 = utils.log_step("load pix", t0, cfg.log)
+ecl_lon = np.load(paths.pointing_file("ecl_lon"), mmap_mode="r")
+ecl_lat = np.load(paths.pointing_file("ecl_lat"), mmap_mode="r")
+if cfg.noise:
+    t0 = utils.log_step("load sigma", t0, cfg.log)
     sigma = np.load(paths.data_file("noise"), mmap_mode="r")
 
-    t0 = utils.log_step("compute w_noise", t0, args.run_name)
+    t0 = utils.log_step("compute w_noise", t0, cfg.log)
     w_noise = 1.0 / sigma**2
 else:
     w_noise = 1
 
-if args.sim_type == "firas":
-    t0 = utils.log_step("divide ifgs by N_IFGS", t0, args.run_name)
+if cfg.sim_type == "firas":
+    t0 = utils.log_step("divide ifgs by N_IFGS", t0, cfg.log)
     ifgs = ifgs / g.N_IFGS
     
-t0 = utils.log_step("initialize numerator and denominator", t0, args.run_name)
+t0 = utils.log_step("initialize numerator and denominator", t0, cfg.log)
 # how many unique pixels are there?
-numerator = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
+numerator = np.zeros((cfg.npix, cfg.ifg_size), dtype=float)
 denominator = np.zeros_like(numerator, dtype=float)
 # Vectorized accumulation: loop over IFG sample index (usually much smaller
 # than the number of IFGs) and use np.bincount to accumulate values per pixel.
 # This avoids the expensive Python-level loop over all IFGs and is much faster.
-t0 = utils.log_step("ang2pix", t0, args.run_name)
+t0 = utils.log_step("ang2pix", t0, cfg.log)
 
-pix_path = paths.data_file(f"pix_nside{g.NSIDE[args.sim_type]}")
-if not pix_path.exists():
-    pix_grid = hp.ang2pix(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, lonlat=True)  
-    np.save(pix_path, pix_grid)
-else:
-    pix_grid = np.load(pix_path, mmap_mode="r")
+pix_grid = utils.ang2pix_cached(cfg.nside, ecl_lon, ecl_lat,
+                                paths.pointing_file(f"pix_nside{cfg.nside}"), nworkers=cfg.nworkers)
 
-t0 = utils.log_step("compute numerator and denominator", t0, args.run_name)
-if args.sim_type == "fossil":
-    numerator, denominator = accumulate_fossil(ifgs, pix_grid, w_noise, g.NPIX[args.sim_type])
+t0 = utils.log_step("compute numerator and denominator", t0, cfg.log)
+if cfg.sim_type == "fossil":
+    numerator, denominator = accumulate_fossil(ifgs, pix_grid, w_noise, cfg.npix)
     denominator *= w_noise
 
-elif args.sim_type == "firas":
-    for x_i in range(g.IFG_SIZE[args.sim_type]):
+elif cfg.sim_type == "firas":
+    for x_i in range(cfg.ifg_size):
         vals = ifgs[:, x_i] * w_noise
         for ifg_i in range(g.N_IFGS):
             pix = pix_grid[:, x_i, ifg_i]
             
             # bincount returns length npix; fill the column x_i for numerator/denominator
-            numerator[:, x_i] += np.bincount(pix, weights=vals, minlength=g.NPIX[args.sim_type])
-            hits = np.bincount(pix, minlength=g.NPIX[args.sim_type])
+            numerator[:, x_i] += np.bincount(pix, weights=vals, minlength=cfg.npix)
+            hits = np.bincount(pix, minlength=cfg.npix)
             denominator[:, x_i] += hits * w_noise
 else:
-    raise ValueError(f"Unknown sim_type: {args.sim_type}")
+    raise ValueError(f"Unknown sim_type: {cfg.sim_type}")
 
-t0 = utils.log_step("create_mask", t0, args.run_name)
+t0 = utils.log_step("create_mask", t0, cfg.log)
 mask = denominator == 0
 
-t0 = utils.log_step("initialize m_ifg", t0, args.run_name)
-m_ifg = np.zeros((g.NPIX[args.sim_type], g.IFG_SIZE[args.sim_type]), dtype=float)
-t0 = utils.log_step("compute m_ifg", t0, args.run_name)
+t0 = utils.log_step("initialize m_ifg", t0, cfg.log)
+m_ifg = np.zeros((cfg.npix, cfg.ifg_size), dtype=float)
+t0 = utils.log_step("compute m_ifg", t0, cfg.log)
 m_ifg[~mask] = numerator[~mask] / denominator[~mask]
-t0 = utils.log_step("set empty to nan", t0, args.run_name)
+t0 = utils.log_step("set empty to nan", t0, cfg.log)
 m_ifg[mask] = np.nan
 
 ifg_map_dir = paths.mapmaker_dir("binned", "ifg_maps")
-for nui in range(g.IFG_SIZE[args.sim_type]):
+for nui in range(cfg.ifg_size):
     if g.FITS:
         hp.write_map(ifg_map_dir / f"{nui:04d}.fits",
                      m_ifg[:, nui], overwrite=True, dtype=np.float64)
@@ -124,11 +120,11 @@ for nui in range(g.IFG_SIZE[args.sim_type]):
 # Keep only the real spectral component to match the mapmaking convention.
 m = np.fft.rfft(m_ifg, axis=1).real
 
-if args.sim_type == "fossil":
+if cfg.sim_type == "fossil":
     nfreq = 129
-elif args.sim_type == "firas":
+elif cfg.sim_type == "firas":
     nfreq = 257
-frequencies = spectra.generate_frequencies(simtype=args.sim_type, nfreq=nfreq)
+frequencies = spectra.generate_frequencies(simtype=cfg.sim_type, nfreq=nfreq)
 
 path = f"{paths.mapmaker_dir('binned', 'maps')}/"
 for nui, freq in enumerate(frequencies):
@@ -142,7 +138,7 @@ for nui, freq in enumerate(frequencies):
         plt.close()
 print(f"Saved maps to {path}.")
 
-with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+with open(cfg.log, "a") as f:
     f.write(f"{(_time() - t0):0.2f}\n")
     f.write("=" * 50 + "\n")
     f.write(f"Total time for white noise mapmaker: {(_time() - t00)/60:.2f} min\n")

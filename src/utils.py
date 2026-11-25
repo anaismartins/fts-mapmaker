@@ -64,9 +64,10 @@ def save_maps(freq, m, path, write_png=False):
         plt.savefig(f"{path}/{freq_str}.png")
         plt.close()
 
-def log_step(label, t_start, run_name):
+def log_step(label, t_start, log_file):
+    """Append the time since t_start to the profiling log (cfg.log) and start a new step."""
     t = _time()
-    with open(f"../output/profiling/{run_name}.txt", "a") as f:
+    with open(log_file, "a") as f:
         f.write(f"{t - t_start:.2f}\n")
         f.write(f"{label:<40} | ")
     return t

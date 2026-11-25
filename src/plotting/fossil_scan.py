@@ -2,15 +2,13 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
 
-import globals as g
-
 path = "/mn/stornext/u3/aimartin/d5/fts-mapmaker/output/hit_maps/fossil/"
 
 survey_len = 4 # years
 obs_eff = 0.7
 
 days = int(survey_len * 365.25 * obs_eff)
-cum_hit_map = np.zeros(hp.nside2npix(g.NSIDE["fossil"]))
+cum_hit_map = 0
 
 for day in range(1, days+1):
     hit_map = hp.read_map(f"{path}day_{day:04d}.fits")

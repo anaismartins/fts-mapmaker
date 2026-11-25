@@ -8,12 +8,12 @@ from astropy.io import fits
 import globals as g
 import spectra
 import utils
-from argparser import args
+from config import cfg
 from pathlib import Path
 
 
 def smooth_map(input_map):
-    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(g.BEAM[args.sim_type])) * u.uK
+    dust_map_smoothed = hp.smoothing(input_map, fwhm=np.deg2rad(cfg.beam_deg)) * u.uK
 
     dust_map_Mjy = dust_map_smoothed.to(
         u.MJy / u.sr,
@@ -21,7 +21,7 @@ def smooth_map(input_map):
     )
     return dust_map_Mjy.value
 
-def sim_dust(simtype, t0=None, run_name=None):
+def sim_dust(simtype, t0=None, log_file=None):
     dust_map_path = "../input/COM_CompMap_ThermalDust-commander_2048_R2.00.fits"
     if not os.path.exists(dust_map_path):
         from urllib.request import urlretrieve
@@ -33,8 +33,8 @@ def sim_dust(simtype, t0=None, run_name=None):
         urlretrieve(url, dust_map_path)
 
     dust_map = fits.open(dust_map_path)[1].data["I_ML_FULL"]
-    if t0 is not None and run_name is not None:
-        t0 = utils.log_step("load_dust_map", t0, run_name)
+    if t0 is not None and log_file is not None:
+        t0 = utils.log_step("load_dust_map", t0, log_file)
 
     Path(f"../output/data/{simtype}").mkdir(parents=True, exist_ok=True)
 

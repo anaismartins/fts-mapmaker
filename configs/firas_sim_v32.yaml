@@ -1,0 +1,6 @@
+# FIRAS-like simulation (coadded on-board IFGs) on the FOSSIL pointing, with white noise.
+# Same settings as the last run of run_firas_sim.sh (--firas_ss, no --noise).
+sim_type: firas
+nside: 32
+noise: true
+pointing: fossil

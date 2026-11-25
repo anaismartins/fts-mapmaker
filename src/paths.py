@@ -1,36 +1,32 @@
 """
-Single place that defines where versioned outputs live.
+Single place that defines where outputs live.
 
-Every simulation version is identified by (sim_type, sim_name), e.g. ("fossil",
-"fossil_sim_v40_noiseless_nside128"), and everything derived from it follows the layout
+A simulation version is identified by its name (see config.py), and every output derived from it
+sits in a folder named after it:
 
-    ../output/data/<sim_type>/<sim_name>/<kind>.npy       ifgs, noise, ecl_lon, ecl_lat, pix_nsideN
-    ../output/sims/<sim_type>/<sim_name>/<category>/      debug plots, dust_maps, ifgs, pix_hits
-    ../output/hit_maps/<sim_type>/<sim_name>/
-    ../output/<binned|cg|legacy>/<sim_type>/<sim_name>/   mapmaker outputs
-    ../output/compare/<sim_type>/<sim_name>/
+    output/data/<sim_type>/<sim_name>/              ifgs.npy, noise.npy, config.yaml (parameters)
+    output/data/<sim_type>/pointing/<pointing>/     ecl_lon, ecl_lat and pixel-index caches; shared
+                                                    by all versions with the same pointing
+    output/sims/<sim_type>/<sim_name>/<category>/   dust_maps (truth maps), ifgs, pix_hits
+    output/hit_maps/<sim_type>/<sim_name>/
+    output/<binned|cg|legacy>/<sim_type>/<sim_name>/   mapmaker outputs, with run_info.yaml
+    output/compare/<sim_type>/<sim_name>/
+    output/profiling/<sim_type>/<sim_name>/<script>.txt
 
-By default sim_type and sim_name are taken from the command line.
+By default sim_type, sim_name and pointing are those of the current run (config.cfg).
+
+Pixel-index caches (pointing/<pointing>/pix_nside<N>.npy) always have the same layout as
+ecl_lon/ecl_lat: one row per recorded IFG.
 """
 
-from pathlib import Path
+import globals as g
+from config import cfg
 
-from argparser import args
-
-OUTPUT = Path("../output")
-
-
-def _resolve(sim_type, sim_name):
-    sim_type = sim_type or args.sim_type
-    sim_name = sim_name or args.sim_name
-    if sim_type is None or sim_name is None:
-        raise ValueError("Both --sim-type and --sim-name must be given.")
-    return sim_type, sim_name
+OUTPUT = g.OUTPUT_DIR
 
 
 def _dir(root, *parts, sim_type=None, sim_name=None):
-    sim_type, sim_name = _resolve(sim_type, sim_name)
-    path = OUTPUT / root / sim_type / sim_name
+    path = OUTPUT / root / (sim_type or cfg.sim_type) / (sim_name or cfg.sim_name)
     path = path.joinpath(*parts)
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -41,8 +37,15 @@ def data_dir(sim_type=None, sim_name=None):
 
 
 def data_file(kind, sim_type=None, sim_name=None):
-    """Path of ../output/data/<sim_type>/<sim_name>/<kind>.npy, e.g. kind='ifgs'."""
+    """Path of output/data/<sim_type>/<sim_name>/<kind>.npy, e.g. kind='ifgs'."""
     return data_dir(sim_type, sim_name) / f"{kind}.npy"
+
+
+def pointing_file(kind: str, sim_type: str = None, pointing: str = None):
+    """Path of output/data/<sim_type>/pointing/<pointing>/<kind>.npy, e.g. kind='ecl_lon'."""
+    path = OUTPUT / "data" / (sim_type or cfg.sim_type) / "pointing" / (pointing or cfg.pointing)
+    path.mkdir(parents=True, exist_ok=True)
+    return path / f"{kind}.npy"
 
 
 def sim_dir(category, sim_type=None, sim_name=None):

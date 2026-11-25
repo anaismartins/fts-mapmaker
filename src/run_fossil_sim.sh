@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-sim_name="fossil_sim_v40_noiseless_nside128"
+# usage: ./run_fossil_sim.sh <sim_name>   (parameters are in ../configs/<sim_name>.yaml)
+sim_name="${1:?usage: ./run_fossil_sim.sh <sim_name>}"
 mode="debug" #"release"
 
 owl1=owl{31..35}.uio.no
@@ -28,12 +29,11 @@ export OPENBLAS_NUM_THREADS="$nworker"
 # Run the program; its output goes directly to the terminal
 if [ "$mode" = "release" ]; then
     echo "Running in release mode with $nworker workers..."
-    python -m sims.fossil --nworkers "$nworker" --sim-type "fossil" --sim-name "$sim_name" --plots "paper_only" --noise
+    python -m sims.fossil "$sim_name" --nworkers "$nworker" --plots "paper_only"
 else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
-        python -u -m sims.fossil --nworkers "$nworker" --sim-name "$sim_name" --plots "debug" \
-        --sim-type "fossil" --noise
+        python -u -m sims.fossil "$sim_name" --nworkers "$nworker" --plots "debug"
 
     if [ $? -ne 0 ]; then
       echo "Error: The simulation failed. Check the output above for details."

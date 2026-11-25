@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
+# usage: ./run_comparison.sh <sim_name>
 
-sim_type="fossil"
-sim_name="fossil_sim_v40_noiseless_nside128"
-mode="release"
+sim_name="${1:?usage: ./run_comparison.sh <sim_name>}"
+plots="none"  # "none", "debug" or "paper_only"
 
-run_name="comparison_${sim_name}"
-
-MPLBACKEND=Agg python compare.py --sim-type "$sim_type" --sim-name "$sim_name" --run-name "$run_name" --plots "$mode"
+MPLBACKEND=Agg python compare.py "$sim_name" --plots "$plots"

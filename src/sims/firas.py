@@ -5,7 +5,6 @@ assumes data is taken in the short slow mode.
 !!! Needs to be run on an owl with more than 256GB if using the FOSSIL ss.
 """
 
-import os
 from multiprocessing import Pool
 from time import time as _time
 
@@ -18,9 +17,15 @@ import sims.dust_map as dust_map
 import sims.noise as noise
 import paths
 import utils
-from argparser import args
+import config
+from config import cfg
 
-with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+if cfg.sim_type != "firas":
+    raise ValueError(f"{cfg.sim_name} is a {cfg.sim_type} simulation, not firas.")
+# record the parameters of this version next to its data (read back by the mapmakers)
+config.save_record(paths.data_dir(), config.RECORD_NAME)
+
+with open(cfg.log, "w") as f:
     f.write("Profiling output for FIRAS simulation\n")
     f.write("=" * 50 + "\n")
     label = "sim dust"
@@ -29,35 +34,32 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t0 = _time()
 t00 = _time()
 
-dust_map_Mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
+dust_map_Mjy, frequencies, sed = dust_map.sim_dust("firas", t0, cfg.log)
 sed = np.nan_to_num(sed)
 
+# truth maps at the output resolution, used by compare.py
 dust_map_dir = paths.sim_dir("dust_maps")
-if args.plots == "debug" and not (dust_map_dir / "0544.fits").exists():
-        dust = np.multiply.outer(dust_map_Mjy, sed)
+t0 = utils.log_step("prepare args_list for save_maps", t0, cfg.log)
+truth = hp.ud_grade(dust_map_Mjy, cfg.nside)
+args_list = [(frequencies[nui], truth * sed[nui], dust_map_dir) for nui in range(len(frequencies))]
 
-        t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
-        args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in
-                     range(len(frequencies))]
+t0 = utils.log_step("save_dust_maps", t0, cfg.log)
+with Pool(processes=cfg.nworkers) as pool:
+    list(pool.starmap(utils.save_maps, args_list))
+print(f"Saved dust maps to {dust_map_dir}.")
 
-        t0 = utils.log_step("save_dust_maps", t0, args.run_name)
-        with Pool(processes=args.nworkers) as pool:
-            list(pool.starmap(utils.save_maps, args_list))
-        print(f"Saved dust maps to {dust_map_dir}.")
-
-t0 = utils.log_step("irfft", t0, args.run_name)
+t0 = utils.log_step("irfft", t0, cfg.log)
 sed_ifg = np.fft.irfft(sed)
 
-t0 = utils.log_step("multiply dust map", t0, args.run_name)
+t0 = utils.log_step("multiply dust map", t0, cfg.log)
 ifg = np.multiply.outer(dust_map_Mjy, sed_ifg)
 
-t0 = utils.log_step("take real part of ifg", t0, args.run_name)
+t0 = utils.log_step("take real part of ifg", t0, cfg.log)
 ifg = ifg.real
 
-if args.firas_ss:
+if cfg.pointing == "firas":
     print("Using FIRAS scanning strategy for FIRAS simulation.")
-    t0 = utils.log_step("load_sky_data", t0, args.run_name)
-    user = os.environ["USER"]
+    t0 = utils.log_step("load_sky_data", t0, cfg.log)
 
     ecl_lat = np.array([])
     ecl_lon = np.array([])
@@ -73,8 +75,8 @@ if args.firas_ss:
 else:
     print("Using FOSSIL scanning strategy for FIRAS simulation.")
     # mmap + slice a single column instead of loading the full (n_rows, 256) arrays into RAM
-    ecl_lat = np.load("../output/data/fossil/ecl_lat.npy", mmap_mode="r")
-    ecl_lon = np.load("../output/data/fossil/ecl_lon.npy", mmap_mode="r")
+    ecl_lat = np.load(paths.pointing_file("ecl_lat", "fossil", "default"), mmap_mode="r")
+    ecl_lon = np.load(paths.pointing_file("ecl_lon", "fossil", "default"), mmap_mode="r")
 
     ecl_lat = np.array(ecl_lat[:, g.NPIXPERIFG["fossil"]//2])
     ecl_lon = np.array(ecl_lon[:, g.NPIXPERIFG["fossil"]//2])
@@ -105,21 +107,21 @@ time_offset = speed * time_per_ifg_on_source * ifg_grid
 pix_offset = speed * time_per_ifg_on_source * pix_grid / g.NPIXPERIFG["firas"]
 lat_offset = -start_offset + flyback_offset + time_offset + pix_offset  # (1, NPIXPERIFG, N_IFGS)
 
-t0 = utils.log_step("get dust NSIDE", t0, args.run_name)
+t0 = utils.log_step("get dust NSIDE", t0, cfg.log)
 nside_dust = hp.get_nside(dust_map_Mjy)
-npix_firas = hp.nside2npix(g.NSIDE["firas"])
+npix_firas = hp.nside2npix(cfg.nside)
 
 # Everything below scales with n_rows, which can be tens of millions for the FOSSIL scanning
 # strategy. Rather than allocating (n_rows, NPIXPERIFG, N_IFGS) arrays in memory (which can
 # require several TB and cause swapping), process rows in chunks and stream the results to disk
 # via memory-mapped .npy files.
-chunk_size = max(1, min(args.chunk_size, n_rows))
+chunk_size = max(1, min(cfg.chunk_size, n_rows))
 n_chunks = int(np.ceil(n_rows / chunk_size))
 print(f"Processing {n_rows} rows in {n_chunks} chunk(s) of up to {chunk_size} rows.")
 
 total_ifg_path = paths.data_file("ifgs")
-ecl_lat_out_path = paths.data_file("ecl_lat")
-ecl_lon_out_path = paths.data_file("ecl_lon")
+ecl_lat_out_path = paths.pointing_file("ecl_lat")
+ecl_lon_out_path = paths.pointing_file("ecl_lon")
 
 total_ifg_mm = np.lib.format.open_memmap(total_ifg_path, mode="w+", dtype=np.float64,
                                           shape=(n_rows, g.NPIXPERIFG["firas"]))
@@ -130,18 +132,18 @@ ecl_lon_mm = np.lib.format.open_memmap(ecl_lon_out_path, mode="w+", dtype=np.flo
 
 hit_map_counts = np.zeros(npix_firas, dtype=np.int64)
 
-if args.noise:
+if cfg.noise:
     # sigma only depends on the total number of rows (not the chunk size), so compute it once
     sigma = noise.compute_sigma(n_rows, simtype="firas")
 
 # pick one row up front (for debug plots) and remember which chunk it falls in
-n = np.random.randint(0, n_rows) if args.plots in ("debug", "paper_only") else None
+n = np.random.randint(0, n_rows) if cfg.plots in ("debug", "paper_only") else None
 
 for chunk_i in range(n_chunks):
     row_start = chunk_i * chunk_size
     row_end = min(row_start + chunk_size, n_rows)
 
-    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: compute_ecl_lats", t0, args.run_name)
+    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: compute_ecl_lats", t0, cfg.log)
     ecl_lat_chunk = ecl_lat[row_start:row_end, np.newaxis, np.newaxis]
     ecl_lats_chunk = ecl_lat_chunk + lat_offset  # (chunk, NPIXPERIFG, N_IFGS)
     ecl_lons_chunk = np.broadcast_to(
@@ -156,23 +158,23 @@ for chunk_i in range(n_chunks):
     ecl_lats_chunk[mask_high] = 180 - ecl_lats_chunk[mask_high]
     ecl_lons_chunk[mask_high] = 180 - ecl_lons_chunk[mask_high]
 
-    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: compute_pixel_indices", t0, args.run_name)
+    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: compute_pixel_indices", t0, cfg.log)
     pix_ecl_chunk = hp.ang2pix(nside_dust, ecl_lons_chunk, ecl_lats_chunk, lonlat=True)
-    pix_ecl_firas_chunk = hp.ang2pix(g.NSIDE["firas"], ecl_lons_chunk, ecl_lats_chunk, lonlat=True)
+    pix_ecl_firas_chunk = hp.ang2pix(cfg.nside, ecl_lons_chunk, ecl_lats_chunk, lonlat=True)
 
     hit_map_counts += np.bincount(pix_ecl_firas_chunk.ravel(), minlength=npix_firas)
 
-    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: frankenstein_ifgs", t0, args.run_name)
+    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: frankenstein_ifgs", t0, cfg.log)
     ifgs_chunk = np.empty(
         (row_end - row_start, g.NPIXPERIFG["firas"], g.N_IFGS), dtype=np.float64
     )
     for ifg_i in range(g.N_IFGS):
         ifgs_chunk[:, :, ifg_i] = ifg[pix_ecl_chunk[:, :, ifg_i], np.arange(g.NPIXPERIFG["firas"])]
 
-    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: sum_ifgs", t0, args.run_name)
+    t0 = utils.log_step(f"chunk {chunk_i + 1}/{n_chunks}: sum_ifgs", t0, cfg.log)
     total_ifg_chunk = np.sum(ifgs_chunk, axis=2)
 
-    if args.plots == "debug" and n is not None and row_start <= n < row_end:
+    if cfg.plots == "debug" and n is not None and row_start <= n < row_end:
         n_local = n - row_start
         fig, ax = plt.subplots(2, 1, figsize=(10, 8))
         ax[0].plot(ifgs_chunk[n_local], alpha=0.5)
@@ -187,7 +189,7 @@ for chunk_i in range(n_chunks):
         plt.close()
         print(f"Saved IFG {n} to {ifg_dir}.")
 
-    if (args.plots in ("debug", "paper_only")) and n is not None and row_start <= n < row_end:
+    if (cfg.plots in ("debug", "paper_only")) and n is not None and row_start <= n < row_end:
         n_local = n - row_start
         # Create a two-panel figure: full sky + zoomed view
         fig = plt.figure(figsize=(16, 6))
@@ -230,11 +232,11 @@ for chunk_i in range(n_chunks):
         plt.close()
         print(f"Saved pixel hit map for IFG {n} to {pix_hit_dir}.")
 
-    if args.noise:
+    if cfg.noise:
         noise_chunk = np.random.normal(0, sigma, total_ifg_chunk.shape)
         total_ifg_chunk = total_ifg_chunk + noise_chunk
 
-        if args.plots == "debug" and n is not None and row_start <= n < row_end:
+        if cfg.plots == "debug" and n is not None and row_start <= n < row_end:
             n_local = n - row_start
             plt.plot(total_ifg_chunk[n_local], alpha=0.5, label="Signal + Noise")
             plt.plot(np.sum(ifgs_chunk[n_local], axis=1), alpha=0.5, label="Signal")
@@ -254,8 +256,8 @@ total_ifg_mm.flush()
 ecl_lat_mm.flush()
 ecl_lon_mm.flush()
 
-if args.plots == "debug":
-    t0 = utils.log_step("save_hit_map", t0, args.run_name)
+if cfg.plots == "debug":
+    t0 = utils.log_step("save_hit_map", t0, cfg.log)
     hit_map = hit_map_counts.astype(np.float64)
     mask = hit_map == 0
     hit_map[mask] = hp.UNSEEN
@@ -271,11 +273,11 @@ if args.plots == "debug":
                     dtype=np.float64)
     print(f"Saved hit map of the scanning strategy to {hit_map_dir}.")
 
-if args.noise:
+if cfg.noise:
     np.save(paths.data_file("noise"), sigma)
 print(f"Saved FIRAS IFGs to {paths.data_dir()}. A total of {n_rows} IFGs were generated.")
 
-with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+with open(cfg.log, "a") as f:
     f.write(f"{(_time() - t00)/60:.2f}\n")
     f.write("=" * 50 + "\n")
     f.write(f"Total time for FIRAS simulation: {(_time() - t00)/60:.2f} min\n")

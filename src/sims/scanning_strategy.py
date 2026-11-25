@@ -17,6 +17,7 @@ from erfa import ErfaWarning
 
 import globals as g
 import paths
+from config import cfg
 
 # Suppress ERFA warnings about dubious year for future dates
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -116,12 +117,12 @@ def calculate_batch(batch_idx,
 
     # convert pointing vectors to spherical coordinates
     lon, lat = hp.vec2ang(los_vec, lonlat=True)
-    pix = hp.ang2pix(g.NSIDE["fossil"], lon, lat, lonlat=True)
+    pix = hp.ang2pix(cfg.nside, lon, lat, lonlat=True)
 
     if verbose:
         print(f"  Finished batch {batch_idx + 1}.")
     if verbose:
-        hit_map = np.bincount(pix, minlength=hp.nside2npix(g.NSIDE["fossil"]))
+        hit_map = np.bincount(pix, minlength=hp.nside2npix(cfg.nside))
         # save hit map for each batch
         hp.write_map(
             f"../output/hit_maps/fossil/day_{batch_idx + 1:04d}.fits",
@@ -139,7 +140,7 @@ def available_cpu_count():
         return len(os.sched_getaffinity(0))
     return cpu_count()
 
-def create_pointings(args):
+def create_pointings():
     # instrument parameters
     survey_len = 4 # years
     obs_eff = 0.7
@@ -148,7 +149,7 @@ def create_pointings(args):
     n_batches = int(survey_len * 365.25 * obs_eff) # one day batches
     print(f"\n{'='*60}")
     print(f"Starting parallel processing of {n_batches} batches")
-    nworkers = min(args.nworkers, n_batches)
+    nworkers = min(cfg.nworkers, n_batches)
     print(f"Using {nworkers} workers (CPU cores available: {available_cpu_count()})")
     print(f"{'='*60}\n")
 
@@ -163,8 +164,8 @@ def create_pointings(args):
     ecl_lat = np.concatenate(lat_list)
 
     # save all pointings
-    np.save(paths.data_file("ecl_lon", "fossil", args.sim_name), ecl_lon)
-    np.save(paths.data_file("ecl_lat", "fossil", args.sim_name), ecl_lat)
+    np.save(paths.pointing_file("ecl_lon"), ecl_lon)
+    np.save(paths.pointing_file("ecl_lat"), ecl_lat)
     print("Saved pointings.")
     return ecl_lon, ecl_lat
 
@@ -174,7 +175,7 @@ if __name__ == "__main__":
     print(f"Shape of lon: {lon.shape}, lat: {lat.shape}")
 
     # plot hit map of just one IFG
-    hit_map = np.bincount(pix[0], minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    hit_map = np.bincount(pix[0], minlength=hp.nside2npix(cfg.nside))
     hp.mollview(
         hit_map,
         title="Scanning Strategy Hit Map - One IFG",
@@ -188,7 +189,7 @@ if __name__ == "__main__":
     plt.close()
 
     # plot ten first IFGs
-    hit_map = np.bincount(pix[:10].flatten(), minlength=hp.nside2npix(g.NSIDE["fossil"]))
+    hit_map = np.bincount(pix[:10].flatten(), minlength=hp.nside2npix(cfg.nside))
     hp.mollview(
         hit_map,
         title="Scanning Strategy Hit Map - First 10 IFGs",

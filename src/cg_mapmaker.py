@@ -18,7 +18,8 @@ import globals as g
 import paths
 import spectra
 import utils
-from argparser import args
+import config
+from config import cfg
 
 
 @nb.njit(parallel=True, fastmath=True)
@@ -72,15 +73,15 @@ def A_dot_x(x, pointing, sigma, n_pix):
     """
     Implementation of A @ x.
     """
-    x = x.reshape((n_pix, g.IFG_SIZE[args.sim_type]))
+    x = x.reshape((n_pix, cfg.ifg_size))
 
-    Pm = np.zeros((pointing.shape[1], g.IFG_SIZE[args.sim_type]), dtype=np.float64)
+    Pm = np.zeros((pointing.shape[1], cfg.ifg_size), dtype=np.float64)
 
-    if args.sim_type == "fossil":
-        for x_i in range(g.IFG_SIZE[args.sim_type]):
+    if cfg.sim_type == "fossil":
+        for x_i in range(cfg.ifg_size):
             Pm[:, x_i] = x[pointing[x_i], x_i]
-    elif args.sim_type == "firas":
-        for x_i in range(g.IFG_SIZE[args.sim_type]):
+    elif cfg.sim_type == "firas":
+        for x_i in range(cfg.ifg_size):
             for ifg_i in range(g.N_IFGS):
                 Pm[:, x_i] += x[pointing[x_i, :, ifg_i], x_i]
 
@@ -90,18 +91,18 @@ def A_dot_x(x, pointing, sigma, n_pix):
     # 3) Scatter back
     Ax = np.zeros_like(x)
     # for ifg_i in range(g.N_IFGS):
-    #     for x_i in range(g.IFG_SIZE[args.sim_type]):
+    #     for x_i in range(cfg.ifg_size):
     #         for data_point_i in range(pointing.shape[0]):
-    #             if args.sim_type == "fossil":
+    #             if cfg.sim_type == "fossil":
     #                 pix = pointing[data_point_i, x_i]
-    #             elif args.sim_type == "firas":
+    #             elif cfg.sim_type == "firas":
     #                 pix = pointing[data_point_i, x_i, ifg_i]
     #             Ax[pix, x_i] += NPm[data_point_i, x_i]
-    if args.sim_type == "fossil":
-        for x_i in range(g.IFG_SIZE[args.sim_type]):
+    if cfg.sim_type == "fossil":
+        for x_i in range(cfg.ifg_size):
             Ax[:, x_i] = np.bincount(pointing[x_i], weights=NPm[:, x_i], minlength=n_pix)
-    elif args.sim_type == "firas":
-        for x_i in range(g.IFG_SIZE[args.sim_type]):
+    elif cfg.sim_type == "firas":
+        for x_i in range(cfg.ifg_size):
             for ifg_i in range(g.N_IFGS):
                 Ax[:, x_i] += np.bincount(pointing[x_i, :, ifg_i], weights=NPm[:, x_i],
                                           minlength=n_pix)
@@ -115,9 +116,9 @@ def A_dot_x(x, pointing, sigma, n_pix):
     # P = csc_matrix((hits, (rows, cols)), shape=(n_data, n_pix * n_ifg))
 
 def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxiter=1000, tol=1e-5,
-                                      npix=g.NPIX[args.sim_type], t0=None):
+                                      npix=cfg.npix, t0=None):
 
-    t0 = utils.log_step("A_dot_x", t0, args.run_name)
+    t0 = utils.log_step("A_dot_x", t0, cfg.log)
     Ax = A_dot_x(x, pointing, sigma, n_pix=npix).ravel()
     b = b.ravel()
 
@@ -131,10 +132,10 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
     delta0 = delta_new
 
     for i in range(maxiter):
-        t0 = utils.log_step(f"PCG iteration {i+1}/{maxiter}", t0, args.run_name)
+        t0 = utils.log_step(f"PCG iteration {i+1}/{maxiter}", t0, cfg.log)
         eps = delta_new / delta0 if delta0 != 0 else 0.0
         print(f"PCG iteration {i+1}/{maxiter}, eps={eps}")
-        t0 = utils.log_step(f"q A_dot_x ({i})", t0, args.run_name)
+        t0 = utils.log_step(f"q A_dot_x ({i})", t0, cfg.log)
         q = A_dot_x(d, pointing, sigma, n_pix=npix).ravel()
 
         alpha = delta_new / np.dot(d.T, q)
@@ -158,16 +159,16 @@ def preconditioned_conjugate_gradient(b, pointing, sigma, precond, x=None, maxit
         if delta_new < tol**2 * delta0:
             break
 
-        if iter % 10 == 0:
-            x = x.reshape((n_pix, ifg_size))
-            m = np.fft.rfft(x, axis=1).real
-            hp.mollview(m[:, g.SPEC_SIZE[args.sim_type]//2], title=f"CG map at iteration {iter}",
+        if cfg.plots == "debug" and i % 10 == 0:
+            m = np.fft.rfft(x.reshape((npix, cfg.ifg_size)), axis=1).real
+            hp.mollview(m[:, cfg.spec_size//2], title=f"CG map at iteration {i}",
                         unit="MJy/sr")
-            plt.savefig(f"../output/debug/{args.sim_type}_cg_map_iter{iter}.png")
-            
+            plt.savefig(paths.mapmaker_dir("cg", "iterations") / f"{i:04d}.png")
+            plt.close()
+
     return x
 
-def conjugate_gradient(b, pointing, sigma, x=None, maxiter=1000, tol=1e-5, npix=g.NPIX[args.sim_type]):
+def conjugate_gradient(b, pointing, sigma, x=None, maxiter=1000, tol=1e-5, npix=cfg.npix):
     """
     Conjugate gradient solver for Ax = b.
     """
@@ -201,8 +202,8 @@ def conjugate_gradient(b, pointing, sigma, x=None, maxiter=1000, tol=1e-5, npix=
     return x
 
 def cg_scipy(pointing):
-    n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
-    n_pix = g.NPIX[args.sim_type]
+    n_ifgs = g.N_IFGS if cfg.sim_type == "firas" else 1
+    n_pix = cfg.npix
     A = LinearOperator((n_pix * ifg_size * n_ifgs, n_pix * ifg_size * n_ifgs), matvec=lambda x:
                        A_dot_x(x, pointing, sigma, n_pix))
 
@@ -286,10 +287,10 @@ def compute_inv_variance_map_3d(pointing, sigma, n_pix, ifg_size, n_ifgs):
 
 
 if __name__ == "__main__":
-    n_pix = g.NPIX[args.sim_type]
-    ifg_size = g.IFG_SIZE[args.sim_type]
+    n_pix = cfg.npix
+    ifg_size = cfg.ifg_size
 
-    with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+    with open(cfg.log, "w") as f:
         f.write("Profiling output for CG mapmaker for FOSSIL\n")
         f.write("=" * 50 + "\n")
         f.write(f"{'starting':<40} | ")
@@ -297,35 +298,31 @@ if __name__ == "__main__":
     t00 = _time()
     t0 = _time()
 
-    if args.sim_type not in ("fossil", "firas"):
-        raise ValueError(f"Unknown sim_type: {args.sim_type}")
+    config.save_record(paths.mapmaker_dir("cg"))
 
-    t0 = utils.log_step("load ifgs", t0, args.run_name)
+    t0 = utils.log_step("load ifgs", t0, cfg.log)
     ifgs = np.load(paths.data_file("ifgs"))
-    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-    ecl_lon = np.load(paths.data_file("ecl_lon"), mmap_mode="r")
-    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
-    ecl_lat = np.load(paths.data_file("ecl_lat"), mmap_mode="r")
-    t0 = utils.log_step("get_noise", t0, args.run_name)
-    if args.noise:
+    t0 = utils.log_step("load ecl_lon", t0, cfg.log)
+    ecl_lon = np.load(paths.pointing_file("ecl_lon"), mmap_mode="r")
+    t0 = utils.log_step("load ecl_lat", t0, cfg.log)
+    ecl_lat = np.load(paths.pointing_file("ecl_lat"), mmap_mode="r")
+    t0 = utils.log_step("get_noise", t0, cfg.log)
+    if cfg.noise:
         sigma = np.load(paths.data_file("noise"), mmap_mode="r")
     else:
         sigma = 1.0
 
-    pix_path = paths.data_file(f"pix_nside{g.NSIDE[args.sim_type]}")
-    if not pix_path.exists():
-        t0 = utils.log_step("ang2pix", t0, args.run_name)
-        pix = utils.ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, nworkers=args.nworkers)
-        pix = np.swapaxes(pix, 0, 1)
-        pix = np.ascontiguousarray(pix)
-        np.save(pix_path, pix)
-    else:
-        t0 = utils.log_step("load pix", t0, args.run_name)
-        pix = np.load(pix_path)
+    # The cache has one row per recorded IFG, like ecl_lon/ecl_lat (it is shared with the sim and
+    # the binned mapmaker); the kernels below want the IFG sample axis first.
+    t0 = utils.log_step("ang2pix", t0, cfg.log)
+    pix = utils.ang2pix_cached(cfg.nside, ecl_lon, ecl_lat,
+                               paths.pointing_file(f"pix_nside{cfg.nside}"), nworkers=cfg.nworkers)
+    t0 = utils.log_step("transpose pix", t0, cfg.log)
+    pix = np.ascontiguousarray(np.swapaxes(pix, 0, 1), dtype=np.int32)
 
-    t0 = utils.log_step("calculate n_ifgs", t0, args.run_name)
-    n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
-    t0 = utils.log_step("calculate b_numba", t0, args.run_name)
+    t0 = utils.log_step("calculate n_ifgs", t0, cfg.log)
+    n_ifgs = g.N_IFGS if cfg.sim_type == "firas" else 1
+    t0 = utils.log_step("calculate b_numba", t0, cfg.log)
     b = calculate_b_numba(ifgs, pix, sigma, n_pix, ifg_size, n_ifgs)
 
     # The CG operator uses pixel-major flattening: idx = pix * n_ifg + ifg.
@@ -339,13 +336,13 @@ if __name__ == "__main__":
     bad_pix = np.isnan(x0).any(axis=1)
     x0 = np.nan_to_num(x0, nan=0.0)
 
-    t0 = utils.log_step("compute_inv_variance_map", t0, args.run_name)
-    if args.sim_type == "fossil":
+    t0 = utils.log_step("compute_inv_variance_map", t0, cfg.log)
+    if cfg.sim_type == "fossil":
         invv_map = compute_inv_variance_map_2d(pix, sigma, n_pix, ifg_size, n_ifgs)
     else:
         invv_map = compute_inv_variance_map_3d(pix, sigma, n_pix, ifg_size, n_ifgs)
 
-    t0 = utils.log_step("preconditioned_conjugate_gradient", t0, args.run_name)
+    t0 = utils.log_step("preconditioned_conjugate_gradient", t0, cfg.log)
     x = preconditioned_conjugate_gradient(b, pix, sigma, invv_map,
                                             x=x0, t0=t0, npix=n_pix)
 
@@ -353,20 +350,20 @@ if __name__ == "__main__":
     m = np.fft.rfft(x, axis=1).real
     m[bad_pix, :] = hp.UNSEEN
 
-    frequencies = spectra.generate_frequencies(simtype=args.sim_type,
-                                               nfreq=g.SPEC_SIZE[args.sim_type])
+    frequencies = spectra.generate_frequencies(simtype=cfg.sim_type,
+                                               nfreq=cfg.spec_size)
 
     path = paths.mapmaker_dir("cg")
     args_list = [(freq, m[:, nui], path) for nui, freq in enumerate(frequencies)]
 
     # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
-    with Pool(processes=args.nworkers) as pool:
+    with Pool(processes=cfg.nworkers) as pool:
         pool.starmap(utils.save_maps, args_list)
 
-    t0 = utils.log_step("save_maps", t0, args.run_name)
+    t0 = utils.log_step("save_maps", t0, cfg.log)
     print(f"Saved maps to {path}.")
         
-    with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    with open(cfg.log, "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")
         f.write("=" * 50 + "\n")
         f.write(f"Total time for CG mapmaker: {(_time() - t00)/60:.2f} min\n")

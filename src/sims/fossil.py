@@ -7,7 +7,6 @@ NB!!! Should be run on a machine with quite a bit of RAM, as it generates all of
 once, and uses around 400 - 500 GB at peak.
 """
 
-import os
 import random
 import warnings
 from multiprocessing import Pool
@@ -25,78 +24,79 @@ import sims.noise as noise
 import sims.scanning_strategy as ss
 import paths
 import utils
-from argparser import args
+import config
+from config import cfg
 
 # ignore far future warning
 warnings.filterwarnings('ignore', category=ErfaWarning)
 
-if args.nworkers is None:
-    args.nworkers = os.cpu_count()
+if cfg.sim_type != "fossil":
+    raise ValueError(f"{cfg.sim_name} is a {cfg.sim_type} simulation, not fossil.")
+# record the parameters of this version next to its data (read back by the mapmakers)
+config.save_record(paths.data_dir(), config.RECORD_NAME)
 
-with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+with open(cfg.log, "w") as f:
     f.write("Profiling output for FOSSIL simulation\n")
-    f.write(f"Number of workers used: {args.nworkers}\n")
+    f.write(f"Number of workers used: {cfg.nworkers}\n")
     f.write("=" * 50 + "\n")
     f.write(f"{'starting':<40} | ")
 
 t0 = _time()
 t00 = _time()
 
-if not paths.data_file("ecl_lat").exists():
-    t0 = utils.log_step("create_pointings", t0, args.run_name)
-    ecl_lon, ecl_lat = ss.create_pointings(args)
+if not paths.pointing_file("ecl_lat").exists():
+    t0 = utils.log_step("create_pointings", t0, cfg.log)
+    ecl_lon, ecl_lat = ss.create_pointings()
 else:
-    t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-    ecl_lon = np.load(paths.data_file("ecl_lon"), mmap_mode="r")
-    t0 = utils.log_step("load ecl_lat", t0, args.run_name)
-    ecl_lat = np.load(paths.data_file("ecl_lat"), mmap_mode="r")
+    t0 = utils.log_step("load ecl_lon", t0, cfg.log)
+    ecl_lon = np.load(paths.pointing_file("ecl_lon"), mmap_mode="r")
+    t0 = utils.log_step("load ecl_lat", t0, cfg.log)
+    ecl_lat = np.load(paths.pointing_file("ecl_lat"), mmap_mode="r")
 
-t0 = utils.log_step("sim_dust", t0, args.run_name)
-dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, args.run_name)
+t0 = utils.log_step("sim_dust", t0, cfg.log)
+dust_map_Mjy, frequencies, sed = dust_map.sim_dust("fossil", t0, cfg.log)
 
-t0 = utils.log_step("irfft", t0, args.run_name)
+t0 = utils.log_step("irfft", t0, cfg.log)
 sed_ifg = fft.irfft(sed)
 
-if args.plots == "debug":
-    dust_map_dir = paths.sim_dir("dust_maps")
-    t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
+if cfg.dust_nside is not None:
+    t0 = utils.log_step("ud_grade dust map", t0, cfg.log)
+    dust_map_Mjy = hp.ud_grade(dust_map_Mjy, cfg.dust_nside)
 
-    debug_nside = 128
-    debug_dust = hp.ud_grade(dust_map_Mjy, debug_nside)
+# truth maps at the output resolution, used by compare.py
+dust_map_dir = paths.sim_dir("dust_maps")
+t0 = utils.log_step("prepare args_list for save_maps", t0, cfg.log)
+truth = hp.ud_grade(dust_map_Mjy, cfg.nside)
+args_list = [(frequencies[nui], truth * sed[nui], dust_map_dir) for nui in range(len(frequencies))]
 
-    # setting the sim map to the same lower NSIDE. TODO: change this back at some point
-    dust_map_Mjy = debug_dust
-    args_list = [(frequencies[nui], debug_dust * sed[nui], dust_map_dir) for nui in
-                 range(len(frequencies))]
-
-    t0 = utils.log_step("save_dust_maps", t0, args.run_name)
-    with Pool(processes=args.nworkers) as pool:
-        list(pool.starmap(utils.save_maps, args_list))
-    print(f"Saved dust maps to {dust_map_dir}.")
+t0 = utils.log_step("save_dust_maps", t0, cfg.log)
+with Pool(processes=cfg.nworkers) as pool:
+    list(pool.starmap(utils.save_maps, args_list))
+print(f"Saved dust maps to {dust_map_dir}.")
 
 # now we frankenstein the IFGs together
-t0 = utils.log_step("prepare shift", t0, args.run_name)
+t0 = utils.log_step("prepare shift", t0, cfg.log)
 n_cols = sed_ifg.shape[0]
 
 # col_idx = np.arange(pix_ecl.shape[1])
 # get the pixel at the NSIDE that the dust map is at for each IFG
-t0 = utils.log_step("get nside", t0, args.run_name)
+t0 = utils.log_step("get nside", t0, cfg.log)
 nside_dust = hp.get_nside(dust_map_Mjy)
-t0 = utils.log_step("ang2pix dust", t0, args.run_name)
+t0 = utils.log_step("ang2pix dust", t0, cfg.log)
 pix_ecl = utils.ang2pix_cached(nside_dust, ecl_lon, ecl_lat,
-                               paths.data_file(f"pix_nside{nside_dust}"), nworkers=args.nworkers)
-t0 = utils.log_step("ang2pix fossil", t0, args.run_name)
-if nside_dust == g.NSIDE["fossil"]:
+                               paths.pointing_file(f"pix_nside{nside_dust}"), nworkers=cfg.nworkers)
+t0 = utils.log_step("ang2pix fossil", t0, cfg.log)
+if nside_dust == cfg.nside:
     # dust map and fossil output share the same NSIDE, so the pixel indices are identical
     pix_ecl_fossil = pix_ecl
 else:
-    pix_ecl_fossil = utils.ang2pix_cached(g.NSIDE["fossil"], ecl_lon, ecl_lat,
-                                          paths.data_file(f"pix_nside{g.NSIDE['fossil']}"),
-                                          nworkers=args.nworkers)
+    pix_ecl_fossil = utils.ang2pix_cached(cfg.nside, ecl_lon, ecl_lat,
+                                          paths.pointing_file(f"pix_nside{cfg.nside}"),
+                                          nworkers=cfg.nworkers)
 
 # plot hit map
-if args.plots == "debug" or args.plots == "paper_only":
-    npix = hp.nside2npix(g.NSIDE["fossil"])
+if cfg.plots == "debug" or cfg.plots == "paper_only":
+    npix = hp.nside2npix(cfg.nside)
     map_pix = np.bincount(pix_ecl_fossil.flatten(), minlength=npix)
     hp.mollview(map_pix, coord=["E", "G"], title="FOSSIL Scanning Strategy Hit map",
                 unit="Number of hits", min=0)
@@ -106,13 +106,12 @@ if args.plots == "debug" or args.plots == "paper_only":
     hp.write_map(hit_map_dir / "scanning_strategy.fits", map_pix, overwrite=True)
     print(f"Saved pixel hit map for all IFGs to {hit_map_dir}.")
 
-t0 = utils.log_step("ifg_scanning indexing", t0, args.run_name)
+t0 = utils.log_step("ifg_scanning indexing", t0, cfg.log)
 ifg_scanning = (dust_map_Mjy[pix_ecl] * sed_ifg).real
 
 n = random.randrange(ifg_scanning.shape[0])
-if args.plots == "debug":
-    ifg_dir = paths.sim_dir("ifgs")
-
+ifg_dir = paths.sim_dir("ifgs")
+if cfg.plots == "debug":
     plt.plot(ifg_scanning[n])
     plt.title(f"IFG {n}")
     plt.ylabel("Interferogram")
@@ -120,7 +119,7 @@ if args.plots == "debug":
     plt.close()
     print(f"Saved IFG {n} to {ifg_dir}.")
 
-if args.plots == "debug" or args.plots == "paper_only":
+if cfg.plots == "debug" or cfg.plots == "paper_only":
     # plot showing how a full IFG is built from frankenstein-ing together different IFGs. shows where each pixel starts and ends in the final IFG.
     pix_ifg = pix_ecl_fossil[n]
     for i in range(len(pix_ifg)):
@@ -139,7 +138,7 @@ if args.plots == "debug" or args.plots == "paper_only":
 
 # plot pixels hit on a map
 # Create a two-panel figure: full sky + zoomed view
-if args.plots == "debug" or args.plots == "paper_only":
+if cfg.plots == "debug" or cfg.plots == "paper_only":
     fig = plt.figure(figsize=(16, 6))
 
     row_pix = pix_ecl_fossil[n]
@@ -149,7 +148,7 @@ if args.plots == "debug" or args.plots == "paper_only":
     lat_center = float(np.mean(row_lat))
 
     print(f"Pixels hit: {np.unique(row_pix).size} unique pixels by IFG {n}.")
-    npix = hp.nside2npix(g.NSIDE["fossil"])
+    npix = hp.nside2npix(cfg.nside)
     map_pix = np.bincount(row_pix, minlength=npix)
     vmax = max(1, int(map_pix.max()))
     ax1 = plt.subplot(1, 2, 1)
@@ -174,16 +173,16 @@ if args.plots == "debug" or args.plots == "paper_only":
     print(f"Saved pixel hit map for IFG {n} to {pix_hit_dir}.")
 
 # add white noise
-if args.noise:
-    t0 = utils.log_step("white_noise", t0, args.run_name)
+if cfg.noise:
+    t0 = utils.log_step("white_noise", t0, cfg.log)
     noise, sigma = noise.white_noise(ifg_scanning.shape[0], simtype="fossil")
 
-if args.noise:
+if cfg.noise:
     ifg_final = ifg_scanning + noise
 else:
     ifg_final = ifg_scanning
 
-if args.plots == "debug" and args.noise:
+if cfg.plots == "debug" and cfg.noise:
 
     plt.plot(ifg_final[n], alpha=0.5, label="Signal + Noise")
     plt.plot(ifg_scanning[n], alpha=0.5, label="Signal")
@@ -202,12 +201,12 @@ if args.plots == "debug" and args.noise:
 
 
 np.save(paths.data_file("ifgs"), ifg_final)
-if args.noise:
-    t0 = utils.log_step("save noise", t0, args.run_name)
+if cfg.noise:
+    t0 = utils.log_step("save noise", t0, cfg.log)
     np.save(paths.data_file("noise"), sigma)
 print(f"Saved IFGs, pixel indices, and noise to {paths.data_dir()}. Number of generated IFGs was " 
       f"{ifg_final.shape[0]}.")
 
-with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+with open(cfg.log, "a") as f:
     f.write("=" * 50 + "\n")
     f.write(f"Total time for FOSSIL simulation: {(_time() - t00)/60:.2f} min\n")

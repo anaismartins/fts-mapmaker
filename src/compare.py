@@ -15,8 +15,9 @@ import globals as g
 import paths
 import setup_matplotlib
 import spectra
+import config
 import utils
-from argparser import args
+from config import cfg
 
 
 def overlay_contour(mask, coord=None, colors="yellow", linewidths=1.0):
@@ -37,11 +38,11 @@ def overlay_contour(mask, coord=None, colors="yellow", linewidths=1.0):
 
 def sum_chi2(nu_i):
     dust_map = hp.read_map(paths.sim_dir("dust_maps") / f"{int(frequencies[nu_i]):04d}.fits")
-    dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
+    dust_map = hp.ud_grade(dust_map, nside_out=cfg.nside)
 
     legacy_map = hp.read_map(paths.mapmaker_dir("legacy") / f"{int(frequencies[nu_i]):04d}.fits")
     binned_map = hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{int(frequencies[nu_i]):04d}.fits")
-    if args.cg_dummy:
+    if cfg.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
         cg_map = hp.read_map(paths.mapmaker_dir("cg") / f"{int(frequencies[nu_i]):04d}.fits")
@@ -66,10 +67,10 @@ def compute_residual_metrics(frequencies, hit_map):
     for frequency in frequencies:
         freq = int(frequency)
         truth = hp.read_map(paths.sim_dir("dust_maps") / f"{freq:04d}.fits")
-        truth = hp.ud_grade(truth, nside_out=g.NSIDE[args.sim_type])
+        truth = hp.ud_grade(truth, nside_out=cfg.nside)
         maps = {"legacy": hp.read_map(paths.mapmaker_dir("legacy") / f"{freq:04d}.fits"),
                 "binned": hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{freq:04d}.fits"),
-                "cg": (np.zeros_like(truth) if args.cg_dummy
+                "cg": (np.zeros_like(truth) if cfg.cg_dummy
                        else hp.read_map(paths.mapmaker_dir("cg") / f"{freq:04d}.fits"))}
 
         common = observed.copy()
@@ -141,7 +142,7 @@ def compare_ifg_maps(frequencies):
     binned_ifg_maps = []
     for freq_i, freq in enumerate(frequencies.astype(int)):
         sim_map = hp.read_map(paths.sim_dir("dust_maps") / f"{freq:04d}.fits")
-        sim_map = hp.ud_grade(sim_map, nside_out=g.NSIDE[args.sim_type])
+        sim_map = hp.ud_grade(sim_map, nside_out=cfg.nside)
         sim_maps.append(sim_map)
 
         if freq_i < len(frequencies) - 1:
@@ -150,7 +151,7 @@ def compare_ifg_maps(frequencies):
                                              f"{ifg_i:04d}.fits")
                 binned_ifg_maps.append(binned_ifg_map)
 
-    print(f"Loaded sim and binned ifg maps for {args.sim_type}.")
+    print(f"Loaded sim and binned ifg maps for {cfg.sim_type}.")
 
     sim_maps = np.array(sim_maps)
     binned_ifg_maps = np.array(binned_ifg_maps)
@@ -161,7 +162,7 @@ def compare_ifg_maps(frequencies):
 
     # compare the sim and binned ifg maps
     print("Comparing sim and binned ifg maps...")
-    for ifg_i in range(g.IFG_SIZE[args.sim_type]):
+    for ifg_i in range(cfg.ifg_size):
         sim_ifg_map = sim_ifg_maps[ifg_i]
         binned_ifg_map = binned_ifg_maps[ifg_i]
 
@@ -188,34 +189,36 @@ def compare_ifg_maps(frequencies):
 
 if __name__ == "__main__":
 
-    with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
+    with open(cfg.log, "w") as f:
             f.write("Profiling output for comparison script\n")
             f.write("=" * 50 + "\n")
             f.write(f"{'starting':<40} | ")
 
+    config.save_record(paths.compare_dir())
+
     t00 = _time()
     t0 = _time()
 
-    if args.sim_type == "fossil":
+    if cfg.sim_type == "fossil":
         ref_freq = 540
         plot_limit = 5
-    elif args.sim_type == "firas":
+    elif cfg.sim_type == "firas":
         ref_freq = 544
         plot_limit = 2
     else:
-        raise ValueError("args.sim_type must be 'fossil' or 'firas'")
+        raise ValueError("cfg.sim_type must be 'fossil' or 'firas'")
 
-    t0 = utils.log_step("load dust map", t0, args.run_name)
+    t0 = utils.log_step("load dust map", t0, cfg.log)
     # plot tiled difference and ratio maps for each mapmaking method
     dust_map = hp.read_map(paths.sim_dir("dust_maps") / f"{ref_freq:04d}.fits")
     # downgrade dust map to the same resolution as the other maps
-    dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
+    dust_map = hp.ud_grade(dust_map, nside_out=cfg.nside)
 
     # get contour of the galaxy by making a snr cut
     snr_cut = 10
     galaxy_mask = np.zeros_like(dust_map)
     galaxy_mask[dust_map > snr_cut] = 1
-    if args.plots == "debug":
+    if cfg.plots == "debug":
         hp.mollview(dust_map, title="Galaxy Contour", min=0, max=50, cbar=False, coord=["E", "G"])
         overlay_contour(galaxy_mask, coord=["E", "G"], colors="red", linewidths=1.5)
         plt.savefig(paths.compare_dir() / "galaxy_contour.png")
@@ -224,7 +227,7 @@ if __name__ == "__main__":
 
     legacy_map = hp.read_map(paths.mapmaker_dir("legacy") / f"{ref_freq:04d}.fits")
     binned_map = hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{ref_freq:04d}.fits")
-    if args.cg_dummy:
+    if cfg.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
         cg_map = hp.read_map(paths.mapmaker_dir("cg") / f"{ref_freq:04d}.fits")
@@ -272,27 +275,27 @@ if __name__ == "__main__":
 
     # COMPARE THE IFG MAPS INSTEAD
     # load all of the sim maps
-    t0 = utils.log_step("generate frequencies", t0, args.run_name)
-    frequencies = spectra.generate_frequencies(simtype=args.sim_type,
-                                                   nfreq=g.SPEC_SIZE[args.sim_type])
+    t0 = utils.log_step("generate frequencies", t0, cfg.log)
+    frequencies = spectra.generate_frequencies(simtype=cfg.sim_type,
+                                                   nfreq=cfg.spec_size)
 
     compare_ifg_maps(frequencies)
     quit()
 
     # calculate the chi2 -- we want to sum over frequencies so we need to load all the maps
-    t0 = utils.log_step("compute residual metrics", t0, args.run_name)
+    t0 = utils.log_step("compute residual metrics", t0, cfg.log)
     compute_residual_metrics(frequencies, hit_map)
 
     # Source - https://stackoverflow.com/a/9786225
     # Posted by Sven Marnach, modified by community. See post 'Timeline' for change history
     # Retrieved 2026-08-15, License - CC BY-SA 4.0
 
-    t0 = utils.log_step("sum_chi2 function", t0, args.run_name)
+    t0 = utils.log_step("sum_chi2 function", t0, cfg.log)
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
     (sq_weight_legacy, sq_weight_binned, sq_weight_cg, sgn_legacy, sgn_binned,
      sgn_cg) = zip(*pool.map(sum_chi2, range(len(frequencies))))
 
-    t0 = utils.log_step("sum_chi2", t0, args.run_name)
+    t0 = utils.log_step("sum_chi2", t0, cfg.log)
     sq_weight_legacy = np.sum(sq_weight_legacy, axis=0)
     sq_weight_binned = np.sum(sq_weight_binned, axis=0)
     sq_weight_cg = np.sum(sq_weight_cg, axis=0)
@@ -308,9 +311,9 @@ if __name__ == "__main__":
     chi2_cg = sgn_cg * np.log10(sq_weight_cg)
     chi2_cg[mask | mask2] = hp.UNSEEN
 
-    if args.sim_type == "fossil":
+    if cfg.sim_type == "fossil":
         max_chi2 = 5
-    elif args.sim_type == "firas":
+    elif cfg.sim_type == "firas":
         max_chi2 = 1000
 
     hp.mollview(chi2_legacy, title="Sign x Log10(Legacy)", min=-max_chi2, max=max_chi2,
@@ -338,7 +341,7 @@ if __name__ == "__main__":
     plt.close()
     print(f"Saved cg chi2 plots to {paths.compare_dir()}.")
 
-    with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
+    with open(cfg.log, "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")
         f.write("=" * 50 + "\n")
         f.write(f"Total time for comparison: {(_time() - t00)/60:.2f} min\n")
