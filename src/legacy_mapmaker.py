@@ -1,4 +1,3 @@
-import os
 from multiprocessing import Pool
 from time import time as _time
 
@@ -7,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
+import paths
 import spectra
 import utils
 from argparser import args
@@ -19,20 +19,13 @@ with open(f"../output/profiling/{args.run_name}.txt", "w") as f:
 t00 = _time()
 t0 = _time()
 
-if args.sim_type == "fossil":
-    add_on = ""
-elif args.sim_type == "firas":
-    if args.firas_ss:
-        add_on = "_firas"
-    else:
-        add_on = "_fossil"
-else:
+if args.sim_type not in ("fossil", "firas"):
     raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
-ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy", mmap_mode="r")
+ifgs = np.load(paths.data_file("ifgs"), mmap_mode="r")
 t0 = utils.log_step("load_pointing", t0, args.run_name)
-ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
-ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
+ecl_lon = np.load(paths.data_file("ecl_lon"), mmap_mode="r")
+ecl_lat = np.load(paths.data_file("ecl_lat"), mmap_mode="r")
 
 if args.sim_type == "firas":
     ifgs = ifgs / g.N_IFGS
@@ -43,10 +36,10 @@ mid_pix = g.NPIXPERIFG[args.sim_type] // 2
 mid_ifg = g.N_IFGS // 2 if args.sim_type == "firas" else None
 
 t0 = utils.log_step("load_middle_pixel", t0, args.run_name)
-mid_lon_path = f"../output/data/{args.sim_type}/ecl_lon_mid{add_on}.npy"
-mid_lat_path = f"../output/data/{args.sim_type}/ecl_lat_mid{add_on}.npy"
+mid_lon_path = paths.data_file("ecl_lon_mid")
+mid_lat_path = paths.data_file("ecl_lat_mid")
 
-if os.path.exists(mid_lon_path) and os.path.exists(mid_lat_path):
+if mid_lon_path.exists() and mid_lat_path.exists():
     ecl_lon_mid = np.load(mid_lon_path)
     ecl_lat_mid = np.load(mid_lat_path)
 else:
@@ -87,11 +80,12 @@ if g.PNG:
                 unit="Number of hits over the full mission", min=0, max=hit_map.max(), xsize=2000,
                 coord=["E", "G"])
     t0 = utils.log_step("save_hit_map", t0, args.run_name)
-    plt.savefig(f"../output/hit_maps/legacy_{args.sim_type}{add_on}.png")
-    plt.savefig(f"../output/hit_maps/legacy_{args.sim_type}{add_on}.pdf")
+    hit_map_dir = paths.hit_map_dir()
+    plt.savefig(hit_map_dir / "legacy.png")
+    plt.savefig(hit_map_dir / "legacy.pdf")
     plt.close()
 
-    print(f"Saved hit map of the scanning strategy to ../output/hit_maps/legacy_{args.sim_type}{add_on}.png.")
+    print(f"Saved hit map of the scanning strategy to {hit_map_dir / 'legacy.png'}.")
 
 pix = pix.astype(np.int64, copy=False)
 
@@ -113,8 +107,7 @@ frequencies = spectra.generate_frequencies(nfreq=g.SPEC_SIZE[args.sim_type], sim
 
 # save m as maps
 t0 = utils.log_step("save_maps", t0, args.run_name)
-folder_add_on = f"/ss{add_on}" if args.sim_type == "firas" else ""
-out_dir = f"../output/legacy/{args.sim_type}{folder_add_on}"
+out_dir = paths.mapmaker_dir("legacy")
 args_list = [(frequencies[nui], m[:, nui], out_dir) for nui in range(len(frequencies))]
 
 # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes

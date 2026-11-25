@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import globals as g
+import paths
 import setup_matplotlib
 import spectra
 import utils
@@ -35,15 +36,15 @@ def overlay_contour(mask, coord=None, colors="yellow", linewidths=1.0):
 
 
 def sum_chi2(nu_i):
-    dust_map = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{int(frequencies[nu_i]):04d}.fits")
+    dust_map = hp.read_map(paths.sim_dir("dust_maps") / f"{int(frequencies[nu_i]):04d}.fits")
     dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
 
-    legacy_map = hp.read_map(f"../output/legacy/{args.sim_type}/{int(frequencies[nu_i]):04d}.fits")
-    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/maps/{int(frequencies[nu_i]):04d}.fits")
+    legacy_map = hp.read_map(paths.mapmaker_dir("legacy") / f"{int(frequencies[nu_i]):04d}.fits")
+    binned_map = hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{int(frequencies[nu_i]):04d}.fits")
     if args.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
-        cg_map = hp.read_map(f"../output/cg/{args.sim_type}/{int(frequencies[nu_i]):04d}.fits")
+        cg_map = hp.read_map(paths.mapmaker_dir("cg") / f"{int(frequencies[nu_i]):04d}.fits")
 
     sq_weight_legacy = ((dust_map - legacy_map)**2)/(hit_map**2)
     sq_weight_binned = ((dust_map - binned_map)**2)/(hit_map**2)
@@ -64,9 +65,12 @@ def compute_residual_metrics(frequencies, hit_map):
 
     for frequency in frequencies:
         freq = int(frequency)
-        truth = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{freq:04d}.fits")
+        truth = hp.read_map(paths.sim_dir("dust_maps") / f"{freq:04d}.fits")
         truth = hp.ud_grade(truth, nside_out=g.NSIDE[args.sim_type])
-        maps = {"legacy": hp.read_map(f"../output/legacy/{args.sim_type}/{freq:04d}.fits"), "binned": hp.read_map(f"../output/binned/{args.sim_type}/maps/{freq:04d}.fits"), "cg": (np.zeros_like(truth) if args.cg_dummy else hp.read_map(f"../output/cg/{args.sim_type}/{freq:04d}.fits"))}
+        maps = {"legacy": hp.read_map(paths.mapmaker_dir("legacy") / f"{freq:04d}.fits"),
+                "binned": hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{freq:04d}.fits"),
+                "cg": (np.zeros_like(truth) if args.cg_dummy
+                       else hp.read_map(paths.mapmaker_dir("cg") / f"{freq:04d}.fits"))}
 
         common = observed.copy()
         for data in (truth, *maps.values()):
@@ -83,7 +87,7 @@ def compute_residual_metrics(frequencies, hit_map):
             row[f"{method}_centered_rms"] = float(np.std(residual))
         rows.append(row)
 
-    output_path = f"../output/compare/{args.sim_type}_residual_metrics.csv"
+    output_path = paths.compare_dir() / "residual_metrics.csv"
     fieldnames = ["frequency_GHz", "n_common_pixels"] + [f"{method}_{metric}" for method in methods for metric in ("bias", "rms", "centered_rms")]
     with open(output_path, "w", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -115,7 +119,7 @@ def plot_residual_metrics(rows):
     plt.ylabel("Centered RMS (MJy/sr)")
     plt.title("Per-frequency centered RMS of residuals vs. dust simulation")
     plt.legend()
-    plt.savefig(f"../output/compare/{args.sim_type}_residual_rms.png")
+    plt.savefig(paths.compare_dir() / "residual_rms.png")
     plt.close()
 
     plt.figure(figsize=(10, 6))
@@ -129,20 +133,20 @@ def plot_residual_metrics(rows):
     plt.ylabel(r"|Bias| (MJy/sr)")
     plt.title(r"Per-frequency |bias| of residuals vs. dust simulation")
     plt.legend()
-    plt.savefig(f"../output/compare/{args.sim_type}_residual_bias.png")
+    plt.savefig(paths.compare_dir() / "residual_bias.png")
     plt.close()
 
 def compare_ifg_maps(frequencies):
     sim_maps = []
     binned_ifg_maps = []
     for freq_i, freq in enumerate(frequencies.astype(int)):
-        sim_map = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{freq:04d}.fits")
+        sim_map = hp.read_map(paths.sim_dir("dust_maps") / f"{freq:04d}.fits")
         sim_map = hp.ud_grade(sim_map, nside_out=g.NSIDE[args.sim_type])
         sim_maps.append(sim_map)
 
         if freq_i < len(frequencies) - 1:
             for ifg_i in (freq_i * 2, freq_i * 2 + 1):
-                binned_ifg_map = hp.read_map(f"../output/binned/{args.sim_type}/ifg_maps/"
+                binned_ifg_map = hp.read_map(paths.mapmaker_dir("binned", "ifg_maps") /
                                              f"{ifg_i:04d}.fits")
                 binned_ifg_maps.append(binned_ifg_map)
 
@@ -164,12 +168,12 @@ def compare_ifg_maps(frequencies):
         # plot each of these to see how they look
         hp.mollview(sim_ifg_map, title=f"Simulated IFG {ifg_i:04d}", min=-5, max=5,
                     coord=["E", "G"], cmap="RdBu_r")
-        plt.savefig(f"../output/compare/{args.sim_type}_ifg_sim/{ifg_i:04d}.png")
+        plt.savefig(paths.compare_dir("ifg_sim") / f"{ifg_i:04d}.png")
         plt.close()
         
         hp.mollview(binned_ifg_map, title=f"Binned IFG {ifg_i:04d}", min=-5, max=5,
                     coord=["E", "G"], cmap="RdBu_r")
-        plt.savefig(f"../output/compare/{args.sim_type}_ifg_binned/{ifg_i:04d}.png")
+        plt.savefig(paths.compare_dir("ifg_binned") / f"{ifg_i:04d}.png")
         plt.close()
 
         difference = binned_ifg_map - sim_ifg_map
@@ -177,12 +181,10 @@ def compare_ifg_maps(frequencies):
 
         hp.mollview(rel_difference, title=f"Sign x Log10(Binned - Sim) IFG {ifg_i:04d}",
                     min=-5, max=5, coord=["E", "G"], cmap="RdBu_r")
-        plt.savefig(f"../output/compare/{args.sim_type}_ifg_rel_diff/{ifg_i:04d}.png")
+        plt.savefig(paths.compare_dir("ifg_rel_diff") / f"{ifg_i:04d}.png")
         plt.close()
 
-    print(f"Saved sim ifg maps for all IFGs to ../output/compare/{args.sim_type}_ifg_sim/.")
-    print(f"Saved binned ifg map for all IFGs to ../output/compare/{args.sim_type}_ifg_binned/.")
-    print(f"Saved comparison plot for all IFGs to ../output/compare/{args.sim_type}_ifg_rel_diff/.")
+    print(f"Saved sim, binned and relative difference ifg maps to {paths.compare_dir()}.")
 
 if __name__ == "__main__":
 
@@ -205,7 +207,7 @@ if __name__ == "__main__":
 
     t0 = utils.log_step("load dust map", t0, args.run_name)
     # plot tiled difference and ratio maps for each mapmaking method
-    dust_map = hp.read_map(f"../output/sims/{args.sim_type}/dust_maps/{ref_freq:04d}.fits")
+    dust_map = hp.read_map(paths.sim_dir("dust_maps") / f"{ref_freq:04d}.fits")
     # downgrade dust map to the same resolution as the other maps
     dust_map = hp.ud_grade(dust_map, nside_out=g.NSIDE[args.sim_type])
 
@@ -216,22 +218,22 @@ if __name__ == "__main__":
     if args.plots == "debug":
         hp.mollview(dust_map, title="Galaxy Contour", min=0, max=50, cbar=False, coord=["E", "G"])
         overlay_contour(galaxy_mask, coord=["E", "G"], colors="red", linewidths=1.5)
-        plt.savefig(f"../output/debug/{args.sim_type}_galaxy_contour.png")
+        plt.savefig(paths.compare_dir() / "galaxy_contour.png")
         plt.close()
-        print(f"Saved galaxy contour to ../output/debug/{args.sim_type}_galaxy_contour.png.")
+        print(f"Saved galaxy contour to {paths.compare_dir() / 'galaxy_contour.png'}.")
 
-    legacy_map = hp.read_map(f"../output/legacy/{args.sim_type}/{ref_freq:04d}.fits")
-    binned_map = hp.read_map(f"../output/binned/{args.sim_type}/maps/{ref_freq:04d}.fits")
+    legacy_map = hp.read_map(paths.mapmaker_dir("legacy") / f"{ref_freq:04d}.fits")
+    binned_map = hp.read_map(paths.mapmaker_dir("binned", "maps") / f"{ref_freq:04d}.fits")
     if args.cg_dummy:
         cg_map = np.zeros_like(dust_map)
     else:
-        cg_map = hp.read_map(f"../output/cg/{args.sim_type}/{ref_freq:04d}.fits")
+        cg_map = hp.read_map(paths.mapmaker_dir("cg") / f"{ref_freq:04d}.fits")
 
     difference_legacy = legacy_map - dust_map
     difference_binned = binned_map - dust_map
     difference_cg = cg_map - dust_map
 
-    hit_map = hp.read_map(f"../output/hit_maps/scanning_strategy_{args.sim_type}_sim.fits")
+    hit_map = hp.read_map(paths.hit_map_dir() / "scanning_strategy.fits")
 
     mask = (~np.isfinite(hit_map) | (hit_map <= 0) | (hit_map == hp.UNSEEN))
     mask2 = (binned_map == hp.UNSEEN) | (binned_map == 0) | (np.isnan(binned_map))
@@ -249,27 +251,24 @@ if __name__ == "__main__":
 
     hp.mollview(rel_legacy, title="Sign x Log10(Legacy)", min=-plot_limit, max=plot_limit, #cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
-    plt.savefig(f"../output/compare/{args.sim_type}_legacy.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_legacy.png")
+    plt.savefig(paths.compare_dir() / "legacy.pdf")
+    plt.savefig(paths.compare_dir() / "legacy.png")
     plt.close()
-    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_legacy.pdf and "
-          f"../output/compare/{args.sim_type}_legacy.png.")
+    print(f"Saved legacy comparison plots to {paths.compare_dir()}.")
 
     hp.mollview(rel_binned, title="Sign x Log10(Binned)", min=-plot_limit, max=plot_limit, #cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
-    plt.savefig(f"../output/compare/{args.sim_type}_binned.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_binned.png")
+    plt.savefig(paths.compare_dir() / "binned.pdf")
+    plt.savefig(paths.compare_dir() / "binned.png")
     plt.close()
-    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_binned.pdf and "
-          f"../output/compare/{args.sim_type}_binned.png.")
+    print(f"Saved binned comparison plots to {paths.compare_dir()}.")
 
     hp.mollview(rel_cg, title="Sign x Log10(CG)", min=-plot_limit, max=plot_limit, #cbar=False,
                 coord=["E", "G"], cmap="RdBu_r")
-    plt.savefig(f"../output/compare/{args.sim_type}_cg.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_cg.png")
+    plt.savefig(paths.compare_dir() / "cg.pdf")
+    plt.savefig(paths.compare_dir() / "cg.png")
     plt.close()
-    print(f"Saved comparison plots to ../output/compare/{args.sim_type}_cg.pdf and "
-          f"../output/compare/{args.sim_type}_cg.png.")
+    print(f"Saved cg comparison plots to {paths.compare_dir()}.")
 
     # COMPARE THE IFG MAPS INSTEAD
     # load all of the sim maps
@@ -318,29 +317,26 @@ if __name__ == "__main__":
                 cbar=False,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
-    plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_legacy_chi2.png")
+    plt.savefig(paths.compare_dir() / "legacy_chi2.pdf")
+    plt.savefig(paths.compare_dir() / "legacy_chi2.png")
     plt.close()
-    print(f"Saved legacy chi2 plots to ../output/compare/{args.sim_type}_legacy_chi2.pdf and "
-              f"../output/compare/{args.sim_type}_legacy_chi2.png.")
+    print(f"Saved legacy chi2 plots to {paths.compare_dir()}.")
 
     hp.mollview(chi2_binned, title="Sign x Log10(Binned)", min=-max_chi2, max=max_chi2, cbar=False,
                 coord="E", cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
-    plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_binned_chi2.png")
+    plt.savefig(paths.compare_dir() / "binned_chi2.pdf")
+    plt.savefig(paths.compare_dir() / "binned_chi2.png")
     plt.close()
-    print(f"Saved binned chi2 plots to ../output/compare/{args.sim_type}_binned_chi2.pdf and "
-              f"../output/compare/{args.sim_type}_binned_chi2.png.")
+    print(f"Saved binned chi2 plots to {paths.compare_dir()}.")
 
     hp.mollview(chi2_cg, title="Sign x Log10(CG)", min=-max_chi2, max=max_chi2, cbar=False, coord="E",
                 cmap="RdBu_r")
     overlay_contour(galaxy_mask, coord="E")
-    plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.pdf")
-    plt.savefig(f"../output/compare/{args.sim_type}_cg_chi2.png")
+    plt.savefig(paths.compare_dir() / "cg_chi2.pdf")
+    plt.savefig(paths.compare_dir() / "cg_chi2.png")
     plt.close()
-    print(f"Saved cg chi2 plots to ../output/compare/{args.sim_type}_cg_chi2.pdf and "
-              f"../output/compare/{args.sim_type}_cg_chi2.png.")
+    print(f"Saved cg chi2 plots to {paths.compare_dir()}.")
 
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")

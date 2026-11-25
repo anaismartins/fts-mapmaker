@@ -7,7 +7,6 @@ assumes data is taken in the short slow mode.
 
 import os
 from multiprocessing import Pool
-from pathlib import Path
 from time import time as _time
 
 import healpy as hp
@@ -17,6 +16,7 @@ import numpy as np
 import globals as g
 import sims.dust_map as dust_map
 import sims.noise as noise
+import paths
 import utils
 from argparser import args
 
@@ -32,23 +32,17 @@ t00 = _time()
 dust_map_Mjy, frequencies, sed = dust_map.sim_dust("firas", t0, args.run_name)
 sed = np.nan_to_num(sed)
 
-if args.firas_ss:
-    add_on = "firas"
-else:
-    add_on = "fossil"
-
-if args.plots == "debug" and not os.path.exists("../output/sims/firas/dust_maps/0544.fits"):
+dust_map_dir = paths.sim_dir("dust_maps")
+if args.plots == "debug" and not (dust_map_dir / "0544.fits").exists():
         dust = np.multiply.outer(dust_map_Mjy, sed)
 
-        dust_map_dir = "../output/sims/firas/dust_maps"
-        Path(f"{dust_map_dir}").mkdir(parents=True, exist_ok=True)
         t0 = utils.log_step("prepare args_list for save_maps", t0, args.run_name)
-        args_list = [(frequencies[nui], dust[:, nui], dust_map_dir, add_on) for nui in
+        args_list = [(frequencies[nui], dust[:, nui], dust_map_dir) for nui in
                      range(len(frequencies))]
 
         t0 = utils.log_step("save_dust_maps", t0, args.run_name)
         with Pool(processes=args.nworkers) as pool:
-            list(pool.imap_unordered(utils._save_one_map, args_list))
+            list(pool.starmap(utils.save_maps, args_list))
         print(f"Saved dust maps to {dust_map_dir}.")
 
 t0 = utils.log_step("irfft", t0, args.run_name)
@@ -123,11 +117,9 @@ chunk_size = max(1, min(args.chunk_size, n_rows))
 n_chunks = int(np.ceil(n_rows / chunk_size))
 print(f"Processing {n_rows} rows in {n_chunks} chunk(s) of up to {chunk_size} rows.")
 
-data_dir = Path("../output/data/firas")
-data_dir.mkdir(parents=True, exist_ok=True)
-total_ifg_path = data_dir / f"ifgs_{add_on}.npy"
-ecl_lat_out_path = data_dir / f"ecl_lat_{add_on}.npy"
-ecl_lon_out_path = data_dir / f"ecl_lon_{add_on}.npy"
+total_ifg_path = paths.data_file("ifgs")
+ecl_lat_out_path = paths.data_file("ecl_lat")
+ecl_lon_out_path = paths.data_file("ecl_lon")
 
 total_ifg_mm = np.lib.format.open_memmap(total_ifg_path, mode="w+", dtype=np.float64,
                                           shape=(n_rows, g.NPIXPERIFG["firas"]))
@@ -190,10 +182,10 @@ for chunk_i in range(n_chunks):
         ax[1].set_title(f"Total IFG for pixel {n}")
         ax[1].set_ylabel("Interferogram")
         plt.tight_layout()
-        Path("../output/sims/firas/ifgs").mkdir(parents=True, exist_ok=True)
-        plt.savefig(f"../output/sims/firas/ifgs/{n}_{add_on}.png")
+        ifg_dir = paths.sim_dir("ifgs")
+        plt.savefig(ifg_dir / f"{n}.png")
         plt.close()
-        print(f"Saved IFG {n} to ../output/sims/firas/ifgs/{n}_{add_on}.png.")
+        print(f"Saved IFG {n} to {ifg_dir}.")
 
     if (args.plots in ("debug", "paper_only")) and n is not None and row_start <= n < row_end:
         n_local = n - row_start
@@ -233,10 +225,10 @@ for chunk_i in range(n_chunks):
         current_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
         current_ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.1f}"))
 
-        Path("../output/sims/firas/pix_hits").mkdir(parents=True, exist_ok=True)
-        plt.savefig(f"../output/sims/firas/pix_hits/{n}_{add_on}.png", dpi=150, bbox_inches="tight")
+        pix_hit_dir = paths.sim_dir("pix_hits")
+        plt.savefig(pix_hit_dir / f"{n}.png", dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"Saved pixel hit map for IFG {n} to ../output/sims/firas/pix_hits/{n}_{add_on}.png.")
+        print(f"Saved pixel hit map for IFG {n} to {pix_hit_dir}.")
 
     if args.noise:
         noise_chunk = np.random.normal(0, sigma, total_ifg_chunk.shape)
@@ -250,10 +242,9 @@ for chunk_i in range(n_chunks):
             plt.title(f"IFG {n} with noise")
             plt.ylabel("Interferogram")
             plt.legend()
-            plt.savefig(f"../output/sims/firas/ifgs/{n}_{add_on}_with_noise.png")
+            plt.savefig(paths.sim_dir("ifgs") / f"{n}_with_noise.png")
             plt.close()
-            print(f"Saved IFG {n} with noise to "
-                  f"../output/sims/firas/ifgs/{n}_{add_on}_with_noise.png.")
+            print(f"Saved IFG {n} with noise to {paths.sim_dir('ifgs')}.")
 
     total_ifg_mm[row_start:row_end] = total_ifg_chunk
     ecl_lat_mm[row_start:row_end] = ecl_lats_chunk
@@ -268,21 +259,21 @@ if args.plots == "debug":
     hit_map = hit_map_counts.astype(np.float64)
     mask = hit_map == 0
     hit_map[mask] = hp.UNSEEN
+    hit_map_dir = paths.hit_map_dir()
     if g.PNG:
         hp.mollview(hit_map, title="FIRAS Scanning Strategy Hit Map", unit="Number of hits",
                     coord=["E", "G"], format="%.0f", min=0, max=hit_map.max())
 
-        plt.savefig(f"../output/hit_maps/scanning_strategy_firas_sim_{add_on}.png", facecolor=None,
-                    bbox_inches="tight")
+        plt.savefig(hit_map_dir / "scanning_strategy.png", facecolor=None, bbox_inches="tight")
         plt.close()
     if g.FITS:
-        hp.write_map(f"../output/hit_maps/scanning_strategy_firas_sim_{add_on}.fits", hit_map, overwrite=True,
+        hp.write_map(hit_map_dir / "scanning_strategy.fits", hit_map, overwrite=True,
                     dtype=np.float64)
-    print("Saved hit map of the scanning strategy to ../output/hit_maps/.")
+    print(f"Saved hit map of the scanning strategy to {hit_map_dir}.")
 
 if args.noise:
-    np.save(f"../output/data/firas/noise_{add_on}.npy", sigma)
-print(f"Saved FIRAS IFGs to ../output/data/firas/. A total of {n_rows} IFGs were generated.")
+    np.save(paths.data_file("noise"), sigma)
+print(f"Saved FIRAS IFGs to {paths.data_dir()}. A total of {n_rows} IFGs were generated.")
 
 with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
     f.write(f"{(_time() - t00)/60:.2f}\n")

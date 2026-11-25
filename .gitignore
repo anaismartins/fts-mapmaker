@@ -221,3 +221,4 @@ output/*/*.txt
 *.pdf
 .claude/
 *.csv
+AGENTS.md

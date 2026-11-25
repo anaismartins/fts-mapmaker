@@ -5,7 +5,6 @@ or in more simple terms we solve
     A x = b
 """
 
-import os
 from multiprocessing import Pool
 from time import time as _time
 
@@ -16,6 +15,7 @@ import numpy as np
 from scipy.sparse.linalg import LinearOperator, cg
 
 import globals as g
+import paths
 import spectra
 import utils
 from argparser import args
@@ -297,40 +297,31 @@ if __name__ == "__main__":
     t00 = _time()
     t0 = _time()
 
-    if args.sim_type == "fossil":
-        add_on = ""
-        folder_add_on = ""
-    elif args.sim_type == "firas":
-        if args.firas_ss:
-            add_on = "_firas"
-        else:
-            add_on = "_fossil"
-        folder_add_on = f"/ss{add_on}"
-    else:
+    if args.sim_type not in ("fossil", "firas"):
         raise ValueError(f"Unknown sim_type: {args.sim_type}")
 
     t0 = utils.log_step("load ifgs", t0, args.run_name)
-    ifgs = np.load(f"../output/data/{args.sim_type}/ifgs{add_on}.npy")
+    ifgs = np.load(paths.data_file("ifgs"))
     t0 = utils.log_step("load ecl_lon", t0, args.run_name)
-    ecl_lon = np.load(f"../output/data/{args.sim_type}/ecl_lon{add_on}.npy", mmap_mode="r")
+    ecl_lon = np.load(paths.data_file("ecl_lon"), mmap_mode="r")
     t0 = utils.log_step("load ecl_lat", t0, args.run_name)
-    ecl_lat = np.load(f"../output/data/{args.sim_type}/ecl_lat{add_on}.npy", mmap_mode="r")
+    ecl_lat = np.load(paths.data_file("ecl_lat"), mmap_mode="r")
     t0 = utils.log_step("get_noise", t0, args.run_name)
     if args.noise:
-        sigma = np.load(f"../output/data/{args.sim_type}/noise{add_on}.npy", mmap_mode="r")
+        sigma = np.load(paths.data_file("noise"), mmap_mode="r")
     else:
         sigma = 1.0
 
-    if not os.path.exists(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy"):
+    pix_path = paths.data_file(f"pix_nside{g.NSIDE[args.sim_type]}")
+    if not pix_path.exists():
         t0 = utils.log_step("ang2pix", t0, args.run_name)
         pix = utils.ang2pix_threaded(g.NSIDE[args.sim_type], ecl_lon, ecl_lat, nworkers=args.nworkers)
         pix = np.swapaxes(pix, 0, 1)
         pix = np.ascontiguousarray(pix)
-        np.save(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy",
-                pix)
+        np.save(pix_path, pix)
     else:
         t0 = utils.log_step("load pix", t0, args.run_name)
-        pix = np.load(f"../output/data/{args.sim_type}/pix_nside{g.NSIDE[args.sim_type]}{add_on}.npy")
+        pix = np.load(pix_path)
 
     t0 = utils.log_step("calculate n_ifgs", t0, args.run_name)
     n_ifgs = g.N_IFGS if args.sim_type == "firas" else 1
@@ -341,7 +332,7 @@ if __name__ == "__main__":
     # Build x0 in 2D and ravel to avoid IFG-major ordering mistakes.
     x0 = np.zeros((n_pix, ifg_size), dtype=np.float64)
     for i in range(ifg_size):
-        x0[:, i] = hp.read_map(f"../output/binned/{args.sim_type}{folder_add_on}/ifg_maps/{i:04d}.fits")
+        x0[:, i] = hp.read_map(paths.mapmaker_dir("binned", "ifg_maps") / f"{i:04d}.fits")
 
     # NaNs mark pixels never hit by the scan, so the mask is per-pixel and
     # survives the rFFT along the ifg axis.
@@ -365,7 +356,7 @@ if __name__ == "__main__":
     frequencies = spectra.generate_frequencies(simtype=args.sim_type,
                                                nfreq=g.SPEC_SIZE[args.sim_type])
 
-    path = f"../output/cg/{args.sim_type}{folder_add_on}/"
+    path = paths.mapmaker_dir("cg")
     args_list = [(freq, m[:, nui], path) for nui, freq in enumerate(frequencies)]
 
     # hp.mollview + savefig dominates the per-frequency cost, so fan out across processes
@@ -373,7 +364,7 @@ if __name__ == "__main__":
         pool.starmap(utils.save_maps, args_list)
 
     t0 = utils.log_step("save_maps", t0, args.run_name)
-    print(f"Saved maps to ../output/cg/{args.sim_type}{folder_add_on}/.")
+    print(f"Saved maps to {path}.")
         
     with open(f"../output/profiling/{args.run_name}.txt", "a") as f:
         f.write(f"{(_time() - t0):.2f}\n")

@@ -54,14 +54,14 @@ def ang2pix_cached(nside, lon, lat, cache_path, nworkers=None, chunk_size=5_000_
     return np.load(cache_path, mmap_mode="r")
 
 
-def save_maps(freq, m, path, write_png=False, add_on=""):
+def save_maps(freq, m, path, write_png=False):
     freq_str = f"{int(freq):04d}"
     if g.FITS:
-        hp.write_map(f"{path}/{freq_str}{add_on}.fits", m, overwrite=True, dtype=np.float64)
+        hp.write_map(f"{path}/{freq_str}.fits", m, overwrite=True, dtype=np.float64)
     if g.PNG and write_png:
         hp.mollview(m, title=f"{freq_str} GHz", unit="MJy/sr", min=0, max=50, xsize=800,
                     coord=["E", "G"])
-        plt.savefig(f"{path}/{freq_str}{add_on}.png")
+        plt.savefig(f"{path}/{freq_str}.png")
         plt.close()
 
 def log_step(label, t_start, run_name):

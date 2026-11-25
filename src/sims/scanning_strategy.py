@@ -16,6 +16,7 @@ from astropy.time import Time
 from erfa import ErfaWarning
 
 import globals as g
+import paths
 
 # Suppress ERFA warnings about dubious year for future dates
 warnings.filterwarnings('ignore', category=ErfaWarning)
@@ -162,9 +163,8 @@ def create_pointings(args):
     ecl_lat = np.concatenate(lat_list)
 
     # save all pointings
-    data_dir = "../output/data/fossil"
-    np.save(f"{data_dir}/ecl_lon.npy", ecl_lon)
-    np.save(f"{data_dir}/ecl_lat.npy", ecl_lat)
+    np.save(paths.data_file("ecl_lon", "fossil", args.sim_name), ecl_lon)
+    np.save(paths.data_file("ecl_lat", "fossil", args.sim_name), ecl_lat)
     print("Saved pointings.")
     return ecl_lon, ecl_lat
 

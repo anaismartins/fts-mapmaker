@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-run_name="fossil_sim_v39"
+sim_name="fossil_sim_v40_noiseless_nside128"
 mode="debug" #"release"
 
 owl1=owl{31..35}.uio.no
@@ -28,11 +28,11 @@ export OPENBLAS_NUM_THREADS="$nworker"
 # Run the program; its output goes directly to the terminal
 if [ "$mode" = "release" ]; then
     echo "Running in release mode with $nworker workers..."
-    python -m sims.fossil --nworkers "$nworker" --plots "paper_only" --noise
+    python -m sims.fossil --nworkers "$nworker" --sim-type "fossil" --sim-name "$sim_name" --plots "paper_only" --noise
 else
     echo "Running in debug mode with $nworker workers."
     /usr/bin/time -v -o ../output/time_stats.txt \
-        python -u -m sims.fossil --nworkers "$nworker" --run-name "$run_name" --plots "debug" \
+        python -u -m sims.fossil --nworkers "$nworker" --sim-name "$sim_name" --plots "debug" \
         --sim-type "fossil" --noise
 
     if [ $? -ne 0 ]; then
